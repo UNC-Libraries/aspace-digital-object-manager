@@ -1,0 +1,3 @@
+cache_hookid,collid,ref_id,tc_type,tc_indicator,sc_type,sc_indicator,gc_type,gc_indicator,aspace_hookid
+01234_folder_3,01234-z,fcee5fc2bb61effc8836498a8117b05d,SHC Z Box,1,folder,1,NULL,NULL,01234_folder_1
+01234_folder_4,01234-z,fcee5fc2bb61effc8836498a8117b05d,SHC Z Box,1,folder,1,NULL,NULL,01234_folder_2
