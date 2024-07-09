@@ -43,6 +43,7 @@ module ArchivesSpace
 
                 archival_object = ArchivalObject.find(ref_id: ref_id)
                 raise StandardError, "AO not found for ref_id: #{ref_id}" unless archival_object
+                archival_object_json = ArchivalObject.to_jsonmodel(archival_object)
 
                 dig_obj_opts = {
                   # universal
@@ -52,20 +53,19 @@ module ArchivesSpace
                   # cdm
                   collection_number: collection_number,
                   aspace_container_type: aspace_container_type,
-                  ao_title: ArchivalObject.to_jsonmodel(archival_object)['title']
+                  ao_title: archival_object_json['title']
                 }
 
                 digital_object = get_or_create_digital_object(digital_object_id: digital_object_id, **dig_obj_opts)
-                link_dig_obj_archival_obj(archival_object: archival_object, digital_object: digital_object)
-
-                next if source == cdm_source
+                add_digital_object_instance!(archival_object_json: archival_object_json, digital_object: digital_object)
 
                 # Remove any managed CDM DOs on this AO. They are superseded by the
                 # DCR DO we just added.
-                #
                 # We want to unlink but not delete in case DO is attached to other AOs
                 # Any managed DOs made orphans here will be deleted later
-                unlink_any_managed_cdm_do(archival_object)
+                unlink_any_managed_cdm_do!(archival_object_json, archival_object) if source == dcr_source
+
+                update_archival_object!(archival_object, archival_object_json)
               rescue JSONModel::ValidationException, ImportException, Sequel::ValidationFailed, ReferenceError => e
                 # Note: we deliberately don't catch Sequel::DatabaseError here.  The
                 # outer call to DB.open will catch that exception and retry the
@@ -171,22 +171,25 @@ module ArchivesSpace
       DigitalObject.create_from_json(jsonmodel)
     end
 
-    # Adds an instance of a DO to an AO
-    def link_dig_obj_archival_obj(archival_object:, digital_object:)
+    # *Updates an AO in Aspace* according to the archival_object_json given
+    def update_archival_object!(archival_object, archival_object_json)
+      archival_object.update_from_json(archival_object_json)
+    end
+
+    # Adds an instance of a DO to an AO jsonmodel
+    def add_digital_object_instance!(archival_object_json:, digital_object:)
       # We could return early if AO/DO are already linked, but
       # 1) our current sole use in `#handle_datafile` should never call this
       # when the AO/DO are already linked and 2) *maybe* Aspace ignores
       # attempts to add a duplicatative DO instance to an AO?
 
       # link
-      json = ArchivalObject.to_jsonmodel(archival_object)
       instance_json = {'instance_type': 'digital_object',
                        'digital_object': {'ref': digital_object.uri}}
-      json['instances'] << instance_json
-      archival_object.update_from_json(json)
+      archival_object_json['instances'] << instance_json
     end
 
-    def unlink_any_managed_cdm_do(archival_object)
+    def unlink_any_managed_cdm_do(archival_object_json, archival_object)
       ArchivalObject.
         join(:instance, archival_object_id: :id).
         join(:instance_do_link_rlshp, instance_id: :id).
@@ -195,8 +198,8 @@ module ArchivesSpace
         where(digital_object__digital_object_id: /^(#{cdm_source}):.*/).
         select(:digital_object__id).
         each do |instance_data|
-          unlink_dig_obj_archival_obj(digital_object_record_id: instance_data[:id],
-                                      archival_object_id: archival_object.id)
+          unlink_dig_obj_from_json(archival_object_json: archival_object_json,
+                                   digital_object_record_id: instance_data[:id])
         end
     end
 
@@ -232,6 +235,12 @@ module ArchivesSpace
         instance.fetch('digital_object', {})['ref'] == "#{base_ref_uri}#{digital_object_record_id}"
       end
       ao.update_from_json(json)
+    end
+
+    def unlink_dig_obj_from_json(archival_object_json:, digital_object_record_id:)
+      archival_object_json['instances'] = archival_object_json['instances'].reject do |instance|
+        instance.fetch('digital_object', {})['ref'] == "#{base_ref_uri}#{digital_object_record_id}"
+      end
     end
 
     # Deletes managed DOs that are orphaned (i.e. that do not have any instances)
