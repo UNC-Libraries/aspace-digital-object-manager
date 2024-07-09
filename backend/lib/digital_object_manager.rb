@@ -17,57 +17,86 @@ module ArchivesSpace
     end
 
     def handle_datafile(datafile, deletion_scope: nil)
-      CSV.foreach(datafile, headers: true) do |row|
-        # universal
-        content_id = row['content_id'] || row['uuid'] || row['cache_hookid']
-        ref_id = row['ref_id']
-        # dcr
-        content_title = row['content_title'] || row['work_title']
-        # cdm
-        collection_number = row['collid']
-        aspace_container_type = row['aspace_hookid']&.split('_')&.at(1)
+      # To avoid a single large transaction, we split input into 50 row chunks
+      # and create a transaction for each chunk.
+      CSV.open(datafile, headers: true).lazy.each_slice(50) do |slice|
+        success = nil
+        begin
+          DB.open(DB.supports_mvcc?,
+                  :retry_on_optimistic_locking_fail => true,
+                  :isolation_level => :committed) do
+            last_error = nil
 
-        # We store all of the seen content_id:ref_id pairs in upload_inventory
-        # so that we can later retrieve all of the Aspace AO/DO pairs and delete
-        # from Aspace any links that are no longer valid (and that fall within
-        # the deletion_scope)
-        digital_object_id = "#{source}:#{content_id}"
-        upload_inventory[digital_object_id] ||= []
-        upload_inventory[digital_object_id] << ref_id
-        next unless digital_object_needed?(digital_object_id, ref_id)
+            slice.each do |row|
+              begin
+                # universal
+                content_id = row['content_id'] || row['uuid'] || row['cache_hookid']
+                ref_id = row['ref_id']
+                # dcr
+                content_title = row['content_title'] || row['work_title']
+                # cdm
+                collection_number = row['collid']
+                aspace_container_type = row['aspace_hookid']&.split('_')&.at(1)
 
-        archival_object = ArchivalObject.find(ref_id: ref_id)
-        raise StandardError, "AO not found for ref_id: #{ref_id}" unless archival_object
+                digital_object_id = "#{source}:#{content_id}"
+                next unless digital_object_needed?(digital_object_id, ref_id)
 
-        dig_obj_opts = {
-          # universal
-          content_id: content_id,
-          # dcr
-          content_title: content_title,
-          # cdm
-          collection_number: collection_number,
-          aspace_container_type: aspace_container_type,
-          ao_title: ArchivalObject.to_jsonmodel(archival_object)['title']
-        }
+                archival_object = ArchivalObject.find(ref_id: ref_id)
+                raise StandardError, "AO not found for ref_id: #{ref_id}" unless archival_object
 
-        digital_object = get_or_create_digital_object(digital_object_id: digital_object_id, **dig_obj_opts)
-        link_dig_obj_archival_obj(archival_object: archival_object, digital_object: digital_object)
+                dig_obj_opts = {
+                  # universal
+                  content_id: content_id,
+                  # dcr
+                  content_title: content_title,
+                  # cdm
+                  collection_number: collection_number,
+                  aspace_container_type: aspace_container_type,
+                  ao_title: ArchivalObject.to_jsonmodel(archival_object)['title']
+                }
 
-        next if source == cdm_source
+                digital_object = get_or_create_digital_object(digital_object_id: digital_object_id, **dig_obj_opts)
+                link_dig_obj_archival_obj(archival_object: archival_object, digital_object: digital_object)
 
-        # Remove any managed CDM DOs on this AO. They are superseded by the
-        # DCR DO we just added.
-        #
-        # We want to unlink but not delete in case DO is attached to other AOs
-        # Any managed DOs made orphans here will be deleted later
-        unlink_any_managed_cdm_do(archival_object)
+                next if source == cdm_source
+
+                # Remove any managed CDM DOs on this AO. They are superseded by the
+                # DCR DO we just added.
+                #
+                # We want to unlink but not delete in case DO is attached to other AOs
+                # Any managed DOs made orphans here will be deleted later
+                unlink_any_managed_cdm_do(archival_object)
+              rescue JSONModel::ValidationException, ImportException, Sequel::ValidationFailed, ReferenceError => e
+                # Note: we deliberately don't catch Sequel::DatabaseError here.  The
+                # outer call to DB.open will catch that exception and retry the
+                # import for us.
+                last_error = e
+
+                # Roll back the transaction (if there is one)
+                raise Sequel::Rollback, last_error
+              end
+            end
+            success = true
+          end
+        rescue
+          last_error = $!
+        # ensure
+        end
       end
 
-      # Unlink any DO/AO links not present in the data and within scope (scope: none, collections, global)
-      #
-      # We want to unlink but not delete in case DO is attached to other AOs
-      # Any managed DOs made orphans here will be deleted later
-      unlink_digital_objects_not_in_upload(scope: deletion_scope)
+       # Unlink any DO/AO links not present in the data and within scope (scope: none, global)
+       # We want to unlink but not delete in case DO is attached to other AOs
+       # Any managed DOs made orphans here will be deleted later
+      if deletion_scope && deletion_scope != 'none'
+        CSV.foreach(datafile, headers: true) do |row|
+          content_id = row['content_id'] || row['uuid'] || row['cache_hookid']
+          ref_id = row['ref_id']
+          digital_object_id = "#{source}:#{content_id}"
+          upload_inventory[digital_object_id] ||= []
+          upload_inventory[digital_object_id] << ref_id
+        end
+        unlink_digital_objects_not_in_upload(scope: deletion_scope)
+      end
 
       delete_orphaned_digital_objects
     end

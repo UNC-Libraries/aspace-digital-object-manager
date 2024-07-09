@@ -9,6 +9,7 @@ class ArchivesSpaceService < Sinatra::Base
                   ["source", String, "Content source, either 'dcr' or 'cdm'"],
                   ["delete", String, "Scope of deletions for records missing from csv, either 'global' or 'none' (default)", :default => 'none'])
           .permissions([:update_digital_object_record, :delete_archival_record])
+          .use_transaction(false)
           .returns([200, :created],
                   [400, :error]) \
   do
