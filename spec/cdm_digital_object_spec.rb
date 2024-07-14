@@ -18,7 +18,7 @@ module ArchivesSpace
 
       it 'returns correct CDM jsonmodel', :aggregate_failures do
         expect(subject['jsonmodel_type']).to eq('digital_object')
-        expect(subject['digital_object_id']).to eq('cdm:01234_box_5')
+        expect(subject['digital_object_id']).to eq('cdm:01234-z_box_5')
         expect(subject['title']).to eq('Document Case 5: My AO Title')
         expect(subject['publish']).to be true
         expect(subject['file_versions'].length).to eq(1)

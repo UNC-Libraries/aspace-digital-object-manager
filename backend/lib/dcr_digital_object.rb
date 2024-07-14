@@ -10,10 +10,14 @@ module ArchivesSpace
       @content_title = content_title
     end
 
+    def self.digital_object_id(content_id:)
+      "dcr:#{content_id}"
+    end
+
     private
 
     def digital_object_id
-      "dcr:#{content_id}"
+      self.class.digital_object_id(content_id: content_id)
     end
 
     def digital_object_title

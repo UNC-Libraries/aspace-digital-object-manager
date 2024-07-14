@@ -5,6 +5,13 @@ module ArchivesSpace
   class DigitalObjectManager
     attr_reader :source, :repo_id
 
+    # Booleans for whether CDM and DCR DOs are managed are not.
+    # These allow us to skip certain processing steps until we are actually
+    # managing DCR DOs and skip certain steps once we are no longer managing
+    # CDM DOs
+    CDM_MANAGED = true
+    DCR_MANAGED = true
+
     def initialize(source:, repo_id:)
       @source = source
       @repo_id = repo_id
@@ -38,7 +45,14 @@ module ArchivesSpace
                 collection_number = row['collid']
                 aspace_container_type = row['aspace_hookid']&.split('_')&.at(1)
 
-                digital_object_id = "#{source}:#{content_id}"
+                digital_object_id =
+                  case source
+                  when dcr_source
+                    DcrDigitalObject.digital_object_id(content_id: content_id)
+                  when cdm_source
+                    CdmDigitalObject.digital_object_id(collection_number: collection_number, content_id: content_id)
+                  end
+
                 next unless digital_object_needed?(digital_object_id, ref_id)
 
                 archival_object = ArchivalObject.find(ref_id: ref_id)
@@ -63,7 +77,9 @@ module ArchivesSpace
                 # DCR DO we just added.
                 # We want to unlink but not delete in case DO is attached to other AOs
                 # Any managed DOs made orphans here will be deleted later
-                unlink_any_managed_cdm_do!(archival_object_json, archival_object) if source == dcr_source
+                if source == dcr_source && CDM_MANAGED
+                  unlink_any_managed_cdm_do!(archival_object_json, archival_object)
+                end
 
                 update_archival_object!(archival_object, archival_object_json)
               rescue JSONModel::ValidationException, ImportException, Sequel::ValidationFailed, ReferenceError => e
@@ -117,7 +133,7 @@ module ArchivesSpace
       return false if managed_digital_object_inventory.fetch(digital_object_id, []).include?(ref_id)
       return true if source == dcr_source
 
-      !dcr_dos?(ref_id)
+      !DCR_MANAGED || !dcr_dos?(ref_id)
     end
 
     # Returns Boolean of whether AO has DCR DOs

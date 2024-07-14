@@ -24,10 +24,21 @@ module ArchivesSpace
       @container_indicator = @hook_id.split('_', 2).last
     end
 
+    def self.digital_object_id(collection_number:, hook_id: nil, content_id: nil)
+      return unless hook_id || content_id
+
+      hook_id ||= content_id.split('_', 2).last
+      "cdm:#{collection_number}_#{hook_id}"
+    end
+
     private
 
     def digital_object_id
-      "cdm:#{content_id}"
+      self.class.digital_object_id(collection_number: collection_number, hook_id: hook_id)
+    end
+
+    def digital_object_id
+      "cdm:#{collection_number}_#{hook_id}"
     end
 
     def digital_object_title
