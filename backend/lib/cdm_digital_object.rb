@@ -1,41 +1,70 @@
 # frozen_string_literal: true
 
+require_relative 'managed_digital_object'
+
 module ArchivesSpace
   class CdmDigitalObject < ManagedDigitalObject
-    attr_reader :collection_number, :aspace_container_type, :ao_title,
-                :hook_id, :container_indicator
+    attr_reader :collection_number, :ao_title
 
     # - content_id is a cache_hookid, e.g. "01234_folder_1"
     # - collection number needs to include any z modifiers (e.g. "01234-z") or
     #     the CDM search links will fail. The `collid` field from the mapping
     #     file includes z-modifiers. But, for example, the collection number
     #     used as acache_hookid prefix does not, and so would not work.
-    # - aspace_container_type (e.g. "folder", "openreelvideo") should be taken
-    #     from an aspace_hookid. cache_hookid container types are based on EAD
-    #     container types, which will sometimes differ
+    # - aspace_hookid is used to extract an Aspace container type (e.g. "folder",
+    #     "openreelvideo"). It's important to use an aspace_hookid, not a
+    #     cache_hookid, because aspace container types sometimes differ from
+    #     cache/EAD container types
     # - ao_title is the title of any one AO that is or will be linked to this DO
-    def initialize(content_id:, collection_number:, aspace_container_type:, ao_title:, **_kwargs)
-      @content_id = content_id
-      @collection_number = collection_number
-      @aspace_container_type = aspace_container_type
-      @ao_title = ao_title
+    def initialize(content_data, skip_validation: false, **kwargs)
+      content_data.validate unless skip_validation || content_data.validated
 
-      @hook_id = @content_id.split('_', 2).last
-      @container_indicator = @hook_id.split('_', 2).last
+      @content_id = content_data.content_id
+      @collection_number = content_data.collection_number
+      @aspace_hookid = content_data.aspace_hookid
+
+      @ao_title = kwargs[:ao_title]
     end
 
-    def self.digital_object_id(collection_number:, hook_id: nil, content_id: nil)
-      return unless hook_id || content_id
+    def aspace_container_type
+      @aspace_container_type ||= @aspace_hookid.split('_').at(1)
+    end
 
-      hook_id ||= content_id.split('_', 2).last
-      "cdm:#{collection_number}_#{hook_id}"
+    def hook_id
+      @hook_id ||= content_id.split('_', 2).last
+    end
+
+    def container_indicator
+      @container_indicator ||= hook_id.split('_', 2).last
+    end
+
+    def self.id_from_data(input_data)
+      hook_id = input_data.content_id&.split('_', 2)&.last
+
+      "cdm:#{input_data.collection_number}_#{hook_id}"
+    end
+
+    def self.validate(input_data)
+      unless input_data.ref_id.match?(/^\h{32}$/)
+        raise ValidationError, "Invalid ref_id: #{input_data.ref_id}"
+      end
+
+      unless input_data.content_id.match?(/^[^_]+_[^_]+_.*$/)
+        raise ValidationError, "Invalid content_id: #{input_data.content_id}"
+      end
+
+      unless input_data.collection_number.match?(/^[a-zA-Z0-9-]+$/)
+        raise ValidationError, "Invalid collection_number: #{input_data.collection_number}"
+      end
+
+      unless input_data.aspace_hookid.match?(/^[^_]+_[^_]+_.*$/)
+        raise ValidationError, "Invalid aspace_hookid: #{input_data.aspace_hookid}"
+      end
+
+      true
     end
 
     private
-
-    def digital_object_id
-      self.class.digital_object_id(collection_number: collection_number, hook_id: hook_id)
-    end
 
     def digital_object_id
       "cdm:#{collection_number}_#{hook_id}"

@@ -4,11 +4,11 @@ module ArchivesSpace
 
   # Template class for managed Digital Objects in Aspace. You should instead
   # instantiate a DcrDigitalObject or CdmDigitalObject. You can automatically
-  # instantiate the correct subclass with ManagedDigitalObject.from_data
+  # instantiate the correct subclass with DigitalContentData#digital_object
   class ManagedDigitalObject
     attr_reader :content_id
 
-    def initialize(**_kwargs)
+    def initialize(_content_data, **_kwargs)
       raise NoMethodError, "Use `ManagedDigitalObject.from_data` or instantiate a subclass directly"
     end
 
@@ -48,16 +48,9 @@ module ArchivesSpace
       raise NoMethodError, "#{self.class} must implement #content_id_to_uri"
     end
 
-    def self.from_data(**kwargs)
-      content_id = kwargs[:content_id]
-      case content_id
-      when /^\h{8}\-\h{4}\-\h{4}\-\h{4}\-\h{12}$/ # Work UUID
-        DcrDigitalObject.new(**kwargs)
-      when /^[^_]+_[^_]+_.*$/ # hookID with collection prefix, e.g. "01234_folder_1"
-        CdmDigitalObject.new(**kwargs)
-      else
-        raise StandardError, "Invalid content_id format: #{content_id}"
-      end
+    def self.validate
+      raise NoMethodError, "#{self.class} must implement .validate"
     end
+    class ValidationError < RuntimeError; end
   end
 end

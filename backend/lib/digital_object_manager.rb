@@ -1,5 +1,8 @@
 # frozen_string_literal: true
+
 require 'json'
+
+require_relative 'digital_content_data'
 
 module ArchivesSpace
   class DigitalObjectManager
@@ -36,42 +39,41 @@ module ArchivesSpace
 
             slice.each do |row|
               begin
-                # universal
-                content_id = row['content_id'] || row['uuid'] || row['cache_hookid']
-                ref_id = row['ref_id']
-                # dcr
-                content_title = row['content_title'] || row['work_title']
-                # cdm
-                collection_number = row['collid']
-                aspace_container_type = row['aspace_hookid']&.split('_')&.at(1)
+                input_data = DigitalContentData.new(
+                  # universal
+                  source: source,
+                  content_id: row['content_id'] || row['uuid'] || row['cache_hookid'],
+                  ref_id: row['ref_id'],
+                  # dcr
+                  content_title: row['content_title'] || row['work_title'],
+                  # cdm
+                  collection_number: row['collid'],
+                  aspace_hookid: row['aspace_hookid']
+                )
 
-                digital_object_id =
-                  case source
-                  when dcr_source
-                    DcrDigitalObject.digital_object_id(content_id: content_id)
-                  when cdm_source
-                    CdmDigitalObject.digital_object_id(collection_number: collection_number, content_id: content_id)
-                  end
+                next unless digital_object_needed?(input_data.digital_object_id,
+                                                   input_data.ref_id)
 
-                next unless digital_object_needed?(digital_object_id, ref_id)
+                # For performance, defer validation until we screen out data
+                # for which a DO already exists
+                begin
+                  input_data.validate
+                rescue ValidationError
+                  # TODO: log something?
+                  continue
+                end
 
-                archival_object = ArchivalObject.find(ref_id: ref_id)
-                raise StandardError, "AO not found for ref_id: #{ref_id}" unless archival_object
+                archival_object = ArchivalObject.find(ref_id: input_data.ref_id)
+                raise StandardError, "AO not found for ref_id: #{input_data.ref_id}" unless archival_object
                 archival_object_json = ArchivalObject.to_jsonmodel(archival_object)
 
-                dig_obj_opts = {
-                  # universal
-                  content_id: content_id,
-                  # dcr
-                  content_title: content_title,
-                  # cdm
-                  collection_number: collection_number,
-                  aspace_container_type: aspace_container_type,
+                digital_object = get_or_create_digital_object(
+                  input_data,
                   ao_title: archival_object_json['title']
-                }
+                )
 
-                digital_object = get_or_create_digital_object(digital_object_id: digital_object_id, **dig_obj_opts)
-                add_digital_object_instance!(archival_object_json: archival_object_json, digital_object: digital_object)
+                add_digital_object_instance!(archival_object_json: archival_object_json,
+                                             digital_object: digital_object)
 
                 # Remove any managed CDM DOs on this AO. They are superseded by the
                 # DCR DO we just added.
@@ -179,11 +181,11 @@ module ArchivesSpace
     end
 
     # Retrieves an existing DO for a DCR URI; creates a DO if none exists
-    def get_or_create_digital_object(digital_object_id:, **kwargs)
-      existing_dig_obj = DigitalObject.where(digital_object_id: digital_object_id).first
+    def get_or_create_digital_object(input_data, **kwargs)
+      existing_dig_obj = DigitalObject.where(digital_object_id: input_data.digital_object_id).first
       return DigitalObject.to_jsonmodel(existing_dig_obj) if existing_dig_obj
 
-      jsonmodel = ArchivesSpace::ManagedDigitalObject.from_data(**kwargs).jsonmodel
+      jsonmodel = input_data.digital_object(**kwargs).jsonmodel
       DigitalObject.create_from_json(jsonmodel)
     end
 
@@ -205,7 +207,7 @@ module ArchivesSpace
       archival_object_json['instances'] << instance_json
     end
 
-    def unlink_any_managed_cdm_do(archival_object_json, archival_object)
+    def unlink_any_managed_cdm_do!(archival_object_json, archival_object)
       ArchivalObject.
         join(:instance, archival_object_id: :id).
         join(:instance_do_link_rlshp, instance_id: :id).
@@ -254,6 +256,8 @@ module ArchivesSpace
     end
 
     def unlink_dig_obj_from_json(archival_object_json:, digital_object_record_id:)
+      base_ref_uri = "/repositories/#{repo_id}/digital_objects/"
+
       archival_object_json['instances'] = archival_object_json['instances'].reject do |instance|
         instance.fetch('digital_object', {})['ref'] == "#{base_ref_uri}#{digital_object_record_id}"
       end

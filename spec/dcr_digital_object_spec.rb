@@ -2,10 +2,13 @@ require_relative 'spec_helper'
 
 module ArchivesSpace
   RSpec.describe 'DcrDigitalObject', type: :digital_object_manager do
-    let(:dcr_dig_obj) do
-      DcrDigitalObject.new(content_id: '12345678-abcd-abcd-abcd-1234567890ab',
-                          content_title: 'My Work Title')
+    let(:content_data) do
+      DigitalContentData.new(source: 'dcr',
+                             content_id: '12345678-abcd-abcd-abcd-1234567890ab',
+                             ref_id: 'fcee5fc2bb61effc8836498a8117b05d',
+                             content_title: 'My Work Title')
     end
+    let(:dcr_dig_obj) { DcrDigitalObject.new(content_data) }
 
     describe '#jsonmodel' do
       let(:subject) { dcr_dig_obj.jsonmodel }

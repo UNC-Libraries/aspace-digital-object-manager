@@ -2,12 +2,16 @@ require_relative 'spec_helper'
 
 module ArchivesSpace
   RSpec.describe 'CdmDigitalObject', type: :digital_object_manager do
-    let(:cdm_dig_obj) do
-      CdmDigitalObject.new(content_id: '01234_box_5',
-                          collection_number: '01234-z',
-                          aspace_container_type: 'documentcase',
-                          ao_title: 'My AO Title')
+    let(:content_data) do
+      DigitalContentData.new(
+        source: 'cdm',
+        content_id: '01234_box_5',
+        ref_id: 'fcee5fc2bb61effc8836498a8117b05d',
+        collection_number: '01234-z',
+        aspace_hookid: '01234_documentcase_5678'
+      )
     end
+    let(:cdm_dig_obj) { CdmDigitalObject.new(content_data, ao_title: 'My AO Title') }
 
     describe '#jsonmodel' do
       let(:subject) { cdm_dig_obj.jsonmodel }

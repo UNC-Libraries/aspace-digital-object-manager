@@ -2,6 +2,7 @@ $LOAD_PATH.unshift File.expand_path('../backend/lib', __dir__)
 require 'rspec'
 
 require 'digital_object_manager'
+require 'digital_content_data'
 require 'managed_digital_object'
 require 'cdm_digital_object'
 require 'dcr_digital_object'
