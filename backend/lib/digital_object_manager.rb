@@ -107,11 +107,14 @@ module ArchivesSpace
        # Any managed DOs made orphans here will be deleted later
       if deletion_scope && deletion_scope != 'none'
         CSV.foreach(datafile, headers: true) do |row|
-          content_id = row['content_id'] || row['uuid'] || row['cache_hookid']
-          ref_id = row['ref_id']
-          digital_object_id = "#{source}:#{content_id}"
+          input_data = DigitalContentData(
+            source: source,
+            content_id: row['content_id'] || row['uuid'] || row['cache_hookid'],
+            ref_id: row['ref_id']
+          )
+          digital_object_id = input_data.digital_object_id
           upload_inventory[digital_object_id] ||= []
-          upload_inventory[digital_object_id] << ref_id
+          upload_inventory[digital_object_id] << input_data.ref_id
         end
         unlink_digital_objects_not_in_upload(scope: deletion_scope)
       end
