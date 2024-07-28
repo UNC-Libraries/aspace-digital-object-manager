@@ -25,6 +25,7 @@ module ArchivesSpace
         expect(subject['file_versions'].length).to eq(1)
         expect(subject['file_versions'].first['file_uri']).to eq('https://dcr.lib.unc.edu/record/12345678-abcd-abcd-abcd-1234567890ab')
         expect(subject['file_versions'].first['publish']).to be true
+        expect(subject['file_versions'].first['use_statement']).to eq('link')
         expect(subject['file_versions'].first['xlink_actuate_attribute']).to eq('onRequest')
         expect(subject['file_versions'].first['xlink_show_attribute']).to eq('new')
       end

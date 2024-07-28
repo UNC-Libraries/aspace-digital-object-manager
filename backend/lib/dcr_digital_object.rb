@@ -44,5 +44,11 @@ module ArchivesSpace
     def uri
       "https://dcr.lib.unc.edu/record/#{content_id}"
     end
+
+    def role
+      # DCR DOs should have more specific-roles when possible, but until
+      # we have means of assigning them, we use only the default 'link'
+      'link'
+    end
   end
 end

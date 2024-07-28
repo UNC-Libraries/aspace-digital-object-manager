@@ -28,6 +28,7 @@ module ArchivesSpace
         expect(subject['file_versions'].length).to eq(1)
         expect(subject['file_versions'].first['file_uri']).to eq('https://dc.lib.unc.edu/cdm/search/searchterm/box_5!01234-z/field/all!all/mode/exact!exact/conn/and!and')
         expect(subject['file_versions'].first['publish']).to be true
+        expect(subject['file_versions'].first['use_statement']).to eq('link')
         expect(subject['file_versions'].first['xlink_actuate_attribute']).to eq('onRequest')
         expect(subject['file_versions'].first['xlink_show_attribute']).to eq('new')
       end

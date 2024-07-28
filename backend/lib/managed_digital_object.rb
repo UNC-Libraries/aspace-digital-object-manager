@@ -22,6 +22,7 @@ module ArchivesSpace
         {
           "jsonmodel_type" => "file_version",
           "file_uri" => uri,
+          "use_statement" => role,
           "xlink_actuate_attribute" => "onRequest",
           "xlink_show_attribute" => "new",
           "publish" => true
@@ -46,6 +47,11 @@ module ArchivesSpace
 
     def uri
       raise NoMethodError, "#{self.class} must implement #content_id_to_uri"
+    end
+
+    # Aspace 'Use Statement" field
+    def role
+      raise NoMethodError, "#{self.class} must implement #role"
     end
 
     def self.validate

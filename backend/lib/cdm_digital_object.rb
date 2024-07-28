@@ -84,6 +84,12 @@ module ArchivesSpace
       '/field/all!all/mode/exact!exact/conn/and!and'
     end
 
+    def role
+      # All DO URLs to CDM are links to CDM search results - CDM role will
+      # always be 'link' regardless of content type
+      'link'
+    end
+
     def self.container_label(type:)
       label = container_map[type]
       return label if label
