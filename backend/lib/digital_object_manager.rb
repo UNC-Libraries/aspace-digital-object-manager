@@ -30,6 +30,8 @@ module ArchivesSpace
       # To avoid a single large transaction, we split input into 50 row chunks
       # and create a transaction for each chunk.
       CSV.open(datafile, headers: true).lazy.each_slice(50) do |slice|
+        # This begin / DB.open / rescue wrapping was taken from:
+        #   `archivesspace/backend/app/contollers/batch_import.rb`
         success = nil
         begin
           DB.open(DB.supports_mvcc?,
@@ -58,13 +60,24 @@ module ArchivesSpace
                 # for which a DO already exists
                 begin
                   input_data.validate
-                rescue ValidationError
-                  # TODO: log something?
-                  continue
+                rescue ValidationError => e
+                  # TODO: Here we should be handling any error we raise. We want
+                  # to log failures in some fashion and continue on with the next
+                  # input row
+                  raise e
+                  #Log.warn("Digital Object Manager received invalid entry data: #{input_data}")
+                  #next
                 end
 
                 archival_object = ArchivalObject.find(ref_id: input_data.ref_id)
-                raise StandardError, "AO not found for ref_id: #{input_data.ref_id}" unless archival_object
+                unless archival_object
+                  # TODO: Here we should be handling any error we raise. We want
+                  # to log failures in some fashion and continue on with the next
+                  # input row
+                  raise StandardError, "AO not found for ref_id: #{input_data.ref_id}"
+                  #Log.warn("AO not found for ref_id: #{input_data.ref_id}")
+                  #next
+                end
                 archival_object_json = ArchivalObject.to_jsonmodel(archival_object)
 
                 digital_object = get_or_create_digital_object(
@@ -88,6 +101,9 @@ module ArchivesSpace
                 # Note: we deliberately don't catch Sequel::DatabaseError here.  The
                 # outer call to DB.open will catch that exception and retry the
                 # import for us.
+
+                # TODO: here we should be logging failures. Also consider whether
+                # we should be handling other errors (e.g. ValidationError) here
                 last_error = e
 
                 # Roll back the transaction (if there is one)
@@ -98,7 +114,8 @@ module ArchivesSpace
           end
         rescue
           last_error = $!
-        # ensure
+        ensure
+          # pass
         end
       end
 
