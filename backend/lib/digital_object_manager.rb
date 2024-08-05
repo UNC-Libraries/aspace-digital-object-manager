@@ -124,7 +124,7 @@ module ArchivesSpace
        # Any managed DOs made orphans here will be deleted later
       if deletion_scope && deletion_scope != 'none'
         CSV.foreach(datafile, headers: true) do |row|
-          input_data = DigitalContentData(
+          input_data = DigitalContentData.new(
             source: source,
             content_id: row['content_id'] || row['uuid'] || row['cache_hookid'],
             ref_id: row['ref_id']
