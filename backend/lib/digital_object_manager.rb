@@ -138,6 +138,22 @@ module ArchivesSpace
 
     private
 
+    def log
+      return @logger if @logger
+
+      unless AppConfig.has_key?(:digital_object_manager_log)
+        AppConfig[:digital_object_manager_log] = '/opt/archivesspace/logs/digital_object_manager.log'
+      end
+
+      unless AppConfig.has_key?(:digital_object_manager_log_level)
+        AppConfig[:digital_object_manager_log_level] = 'INFO'# TODO: set warn as default
+      end
+
+      output = AppConfig[:digital_object_manager_log]
+      level = AppConfig[:digital_object_manager_log_level].upcase
+      @logger = Logger.new(output, level: level)
+    end
+
     def cdm_source
       'cdm'
     end

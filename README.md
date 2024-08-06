@@ -4,7 +4,16 @@ Adds an API endpoint that manages Aspace Digital Objects (DOs) based on submitte
 
 ## Setup
 
-Remember that you need to add 'digital_object_manager' into the config.rb plugins
+In the ArchivesSpace `config.rb`:
+
+- Add 'digital_object_manager' to the plugins entry
+  - e.g. `AppConfig[:plugins] = ['local', 'lcnaf', 'digital_object_manager]`
+- Optionally, configure a log path
+  - e.g. `AppConfig[:digital_object_manager_log] = '/my/log/path/example.log'`
+  - The default path is `/opt/archivesspace/logs/digital_object_manager.log`
+- Optionally, configure a logging level
+  - e.g. `AppConfig[:digital_object_manager_log_level] = 'error'`
+  - The default logging level is 'warn'
 
 ## Parameters
 
