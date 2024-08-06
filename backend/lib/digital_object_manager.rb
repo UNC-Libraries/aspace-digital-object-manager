@@ -33,6 +33,9 @@ module ArchivesSpace
         # This begin / DB.open / rescue wrapping was taken from:
         #   `archivesspace/backend/app/contollers/batch_import.rb`
         success = nil
+        client_errors_present = false
+        server_errors_present = false
+
         begin
           DB.open(DB.supports_mvcc?,
                   :retry_on_optimistic_locking_fail => true,
@@ -40,81 +43,74 @@ module ArchivesSpace
             last_error = nil
 
             slice.each do |row|
-              begin
-                input_data = DigitalContentData.new(
-                  # universal
-                  source: source,
-                  content_id: row['content_id'] || row['uuid'] || row['cache_hookid'],
-                  ref_id: row['ref_id'],
-                  # dcr
-                  content_title: row['content_title'] || row['work_title'],
-                  # cdm
-                  collection_number: row['collid'],
-                  aspace_hookid: row['aspace_hookid']
-                )
-
-                digital_object_id = input_data.digital_object_id
-                ref_id = input_data.ref_id
-
-                if deletion_scope && deletion_scope != 'none'
-                  upload_inventory[digital_object_id] ||= []
-                  upload_inventory[digital_object_id] << ref_id
-                end
-
-                next unless digital_object_needed?(digital_object_id, ref_id)
-
-                # For performance, defer validation until we screen out data
-                # for which a DO already exists
+              DB.transaction(savepoint: true) do
                 begin
+                  input_data = DigitalContentData.new(
+                    # universal
+                    source: source,
+                    content_id: row['content_id'] || row['uuid'] || row['cache_hookid'],
+                    ref_id: row['ref_id'],
+                    # dcr
+                    content_title: row['content_title'] || row['work_title'],
+                    # cdm
+                    collection_number: row['collid'],
+                    aspace_hookid: row['aspace_hookid']
+                  )
+
+                  digital_object_id = input_data.digital_object_id
+                  ref_id = input_data.ref_id
+
+                  if deletion_scope && deletion_scope != 'none'
+                    upload_inventory[digital_object_id] ||= []
+                    upload_inventory[digital_object_id] << ref_id
+                  end
+
+                  next unless digital_object_needed?(digital_object_id, ref_id)
+
+                  # For performance, defer validation until we screen out data
+                  # for which a DO already exists
                   input_data.validate
-                rescue ValidationError => e
-                  # TODO: Here we should be handling any error we raise. We want
-                  # to log failures in some fashion and continue on with the next
-                  # input row
-                  raise e
-                  #Log.warn("Digital Object Manager received invalid entry data: #{input_data}")
-                  #next
+
+                  archival_object = ArchivalObject.find(ref_id: ref_id)
+                  unless archival_object
+                    raise RefIDNotFoundError, "AO not found for ref_id: #{ref_id}"
+                  end
+                  archival_object_json = ArchivalObject.to_jsonmodel(archival_object)
+
+                  digital_object = get_or_create_digital_object(
+                    input_data,
+                    ao_title: archival_object_json['title']
+                  )
+
+                  add_digital_object_instance!(archival_object_json: archival_object_json,
+                                              digital_object: digital_object)
+
+                  # Remove any managed CDM DOs on this AO. They are superseded by the
+                  # DCR DO we just added.
+                  # We want to unlink but not delete in case DO is attached to other AOs
+                  # Any managed DOs made orphans here will be deleted later
+                  if source == dcr_source && CDM_MANAGED
+                    unlink_any_managed_cdm_do!(archival_object_json, archival_object)
+                  end
+
+                  update_archival_object!(archival_object, archival_object_json)
+                rescue ManagedDigitalObject::ValidationError, RefIDNotFoundError => e
+                  client_errors_present = true
+                  log.warn(e.message)
+
+                  # Roll back to the savepoint
+                  raise Sequel::Rollback, e
+                rescue JSONModel::ValidationException, ImportException, Sequel::ValidationFailed, ReferenceError => e
+                  # Note: we deliberately don't catch Sequel::DatabaseError here.  The
+                  # outer call to DB.open will catch that exception and retry the
+                  # import for us.
+
+                  server_errors_present = true
+                  log.warn(e)
+
+                  # Roll back to the savepoint
+                  raise Sequel::Rollback, e
                 end
-
-                archival_object = ArchivalObject.find(ref_id: ref_id)
-                unless archival_object
-                  # TODO: Here we should be handling any error we raise. We want
-                  # to log failures in some fashion and continue on with the next
-                  # input row
-                  raise StandardError, "AO not found for ref_id: #{input_data.ref_id}"
-                  #Log.warn("AO not found for ref_id: #{input_data.ref_id}")
-                  #next
-                end
-                archival_object_json = ArchivalObject.to_jsonmodel(archival_object)
-
-                digital_object = get_or_create_digital_object(
-                  input_data,
-                  ao_title: archival_object_json['title']
-                )
-
-                add_digital_object_instance!(archival_object_json: archival_object_json,
-                                             digital_object: digital_object)
-
-                # Remove any managed CDM DOs on this AO. They are superseded by the
-                # DCR DO we just added.
-                # We want to unlink but not delete in case DO is attached to other AOs
-                # Any managed DOs made orphans here will be deleted later
-                if source == dcr_source && CDM_MANAGED
-                  unlink_any_managed_cdm_do!(archival_object_json, archival_object)
-                end
-
-                update_archival_object!(archival_object, archival_object_json)
-              rescue JSONModel::ValidationException, ImportException, Sequel::ValidationFailed, ReferenceError => e
-                # Note: we deliberately don't catch Sequel::DatabaseError here.  The
-                # outer call to DB.open will catch that exception and retry the
-                # import for us.
-
-                # TODO: here we should be logging failures. Also consider whether
-                # we should be handling other errors (e.g. ValidationError) here
-                last_error = e
-
-                # Roll back the transaction (if there is one)
-                raise Sequel::Rollback, last_error
               end
             end
             success = true
@@ -134,7 +130,11 @@ module ArchivesSpace
       end
 
       delete_orphaned_digital_objects
+
+      # TODO: return something if errors present
     end
+
+    class RefIDNotFoundError < RuntimeError; end
 
     private
 
