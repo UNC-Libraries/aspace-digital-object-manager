@@ -53,8 +53,15 @@ module ArchivesSpace
                   aspace_hookid: row['aspace_hookid']
                 )
 
-                next unless digital_object_needed?(input_data.digital_object_id,
-                                                   input_data.ref_id)
+                digital_object_id = input_data.digital_object_id
+                ref_id = input_data.ref_id
+
+                if deletion_scope && deletion_scope != 'none'
+                  upload_inventory[digital_object_id] ||= []
+                  upload_inventory[digital_object_id] << ref_id
+                end
+
+                next unless digital_object_needed?(digital_object_id, ref_id)
 
                 # For performance, defer validation until we screen out data
                 # for which a DO already exists
@@ -69,7 +76,7 @@ module ArchivesSpace
                   #next
                 end
 
-                archival_object = ArchivalObject.find(ref_id: input_data.ref_id)
+                archival_object = ArchivalObject.find(ref_id: ref_id)
                 unless archival_object
                   # TODO: Here we should be handling any error we raise. We want
                   # to log failures in some fashion and continue on with the next
@@ -123,16 +130,6 @@ module ArchivesSpace
        # We want to unlink but not delete in case DO is attached to other AOs
        # Any managed DOs made orphans here will be deleted later
       if deletion_scope && deletion_scope != 'none'
-        CSV.foreach(datafile, headers: true) do |row|
-          input_data = DigitalContentData.new(
-            source: source,
-            content_id: row['content_id'] || row['uuid'] || row['cache_hookid'],
-            ref_id: row['ref_id']
-          )
-          digital_object_id = input_data.digital_object_id
-          upload_inventory[digital_object_id] ||= []
-          upload_inventory[digital_object_id] << input_data.ref_id
-        end
         unlink_digital_objects_not_in_upload(scope: deletion_scope)
       end
 
@@ -247,18 +244,34 @@ module ArchivesSpace
       if scope == 'global'
         # Note: adjusting the join order may break things because the select
         # fields aren't qualified (e.g. `id` and `digital_object_id`)
-        ArchivalObject.
-          join(:instance, archival_object_id: :id).
-          join(:instance_do_link_rlshp, instance_id: :id).
-          join(:digital_object, id: :digital_object_id).
-          where(digital_object__digital_object_id: /^(#{source}):.*/).
-          select(:digital_object__digital_object_id, :archival_object__ref_id, :archival_object_id, :digital_object__id).
-          each do |instance_data|
-            next if upload_inventory.fetch(instance_data[:digital_object_id], []).include?(instance_data[:ref_id])
+        instance_deletes_by_ao = {}
+        managed_digital_object_inventory.each do |do_id, ref_ids|
+          next if upload_inventory.fetch(do_id, []).sort == ref_ids.sort
 
-            unlink_dig_obj_archival_obj(digital_object_record_id: instance_data[:id],
-                                        archival_object_id: instance_data[:archival_object_id])
+          delete_ref_ids = ref_ids - upload_inventory.fetch(do_id, [])
+          delete_ref_ids.each do |ref_id|
+            instance_deletes_by_ao[ref_id] ||= []
+            instance_deletes_by_ao[ref_id] << do_id
           end
+        end
+
+        instance_deletes_by_ao.each do |ref_id, deletions|
+          base_ref_uri = "/repositories/#{repo_id}/digital_objects/"
+
+          ao = ArchivalObject.first(ref_id: ref_id)
+          json = ArchivalObject.to_jsonmodel(ao)
+
+          deletions.each do |digital_object_id|
+            digital_object = DigitalObject.first(digital_object_id: digital_object_id)
+            next unless digital_object
+
+            json['instances'] = json['instances'].reject do |instance|
+              instance.fetch('digital_object', {})['ref'] == "#{base_ref_uri}#{digital_object[:id]}"
+            end
+          end
+
+          ao.update_from_json(json)
+        end
       end
     end
 
