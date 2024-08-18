@@ -126,7 +126,11 @@ module ArchivesSpace
        # We want to unlink but not delete in case DO is attached to other AOs
        # Any managed DOs made orphans here will be deleted later
       if deletion_scope && deletion_scope != 'none'
-        unlink_digital_objects_not_in_upload(scope: deletion_scope)
+        DB.open(DB.supports_mvcc?,
+                :retry_on_optimistic_locking_fail => true,
+                :isolation_level => :committed) do
+          unlink_digital_objects_not_in_upload(scope: deletion_scope)
+        end
       end
 
       delete_orphaned_digital_objects
@@ -272,21 +276,23 @@ module ArchivesSpace
         end
 
         instance_deletes_by_ao.each do |ref_id, deletions|
-          base_ref_uri = "/repositories/#{repo_id}/digital_objects/"
+          DB.transaction(savepoint: true) do
+            base_ref_uri = "/repositories/#{repo_id}/digital_objects/"
 
-          ao = ArchivalObject.first(ref_id: ref_id)
-          json = ArchivalObject.to_jsonmodel(ao)
+            ao = ArchivalObject.first(ref_id: ref_id)
+            json = ArchivalObject.to_jsonmodel(ao)
 
-          deletions.each do |digital_object_id|
-            digital_object = DigitalObject.first(digital_object_id: digital_object_id)
-            next unless digital_object
+            deletions.each do |digital_object_id|
+              digital_object = DigitalObject.first(digital_object_id: digital_object_id)
+              next unless digital_object
 
-            json['instances'] = json['instances'].reject do |instance|
-              instance.fetch('digital_object', {})['ref'] == "#{base_ref_uri}#{digital_object[:id]}"
+              json['instances'] = json['instances'].reject do |instance|
+                instance.fetch('digital_object', {})['ref'] == "#{base_ref_uri}#{digital_object[:id]}"
+              end
             end
-          end
 
-          ao.update_from_json(json)
+            ao.update_from_json(json)
+          end
         end
       end
     end
