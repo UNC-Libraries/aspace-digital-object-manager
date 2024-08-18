@@ -91,7 +91,7 @@ module ArchivesSpace
                   unlink_any_managed_cdm_do!(archival_object_json, archival_object)
                 end
 
-                update_archival_object!(archival_object, archival_object_json)
+                update_archival_object(archival_object, archival_object_json)
               rescue ManagedDigitalObject::ValidationError, RefIDNotFoundError => e
                 client_errors_present = true
                 log.warn(e.message)
@@ -122,7 +122,7 @@ module ArchivesSpace
         DB.open(DB.supports_mvcc?,
                 :retry_on_optimistic_locking_fail => true,
                 :isolation_level => :committed) do
-          unlink_digital_objects_not_in_upload(scope: deletion_scope)
+          unlink_digital_objects_not_in_datafile(scope: deletion_scope)
         end
 
         log.info('Beginning orphaned DO deletion')
@@ -183,6 +183,11 @@ module ArchivesSpace
 
     # A hash storing seen DO:AO linking id pairs
     #
+    # Example: {
+    #   'dcr:1234-abcd-56-efg' => ['9fe39e2d6843a3455606f1a94aa77d62'],
+    #   'dcr:5678-lmno-90-xyz' => ['ac6t8y...', 'e94hys...']
+    # }
+    #
     # If this upload represents a full set of digital content for the given
     # source, any managed DOs not present in this inventory are no longer
     # valid and can be unlinked
@@ -222,7 +227,7 @@ module ArchivesSpace
     end
 
     # *Updates an AO in Aspace* according to the archival_object_json given
-    def update_archival_object!(archival_object, archival_object_json)
+    def update_archival_object(archival_object, archival_object_json)
       archival_object.update_from_json(archival_object_json)
     end
 
@@ -239,21 +244,7 @@ module ArchivesSpace
       archival_object_json['instances'] << instance_json
     end
 
-    def unlink_any_managed_cdm_do!(archival_object_json, archival_object)
-      ArchivalObject.
-        join(:instance, archival_object_id: :id).
-        join(:instance_do_link_rlshp, instance_id: :id).
-        join(:digital_object, id: :digital_object_id).
-        where(archival_object__id: archival_object.id).
-        where(digital_object__digital_object_id: /^(#{cdm_source}):.*/).
-        select(:digital_object__id).
-        each do |instance_data|
-          unlink_dig_obj_from_json(archival_object_json: archival_object_json,
-                                   digital_object_record_id: instance_data[:id])
-        end
-    end
-
-    def unlink_digital_objects_not_in_upload(scope: nil)
+    def unlink_digital_objects_not_in_datafile(scope: nil)
       return unless scope && scope != 'none'
 
       if scope == 'global'
@@ -270,6 +261,8 @@ module ArchivesSpace
           end
         end
 
+        # Group deletions by AO so that deleting multiple DOs from an
+        # AO only results in one AO update
         instance_deletes_by_ao.each do |ref_id, deletions|
           DB.transaction(savepoint: true) do
             base_ref_uri = "/repositories/#{repo_id}/digital_objects/"
@@ -292,20 +285,23 @@ module ArchivesSpace
       end
     end
 
-    # `digital_object_record_id` refers to `digital_object.id` and is named such
-    # to avoid confusion with `digital_object.digital_object_id`
-    def unlink_dig_obj_archival_obj(digital_object_record_id:, archival_object_id:)
-      base_ref_uri = "/repositories/#{repo_id}/digital_objects/"
-      ao = ArchivalObject[archival_object_id]
-      json = ArchivalObject.to_jsonmodel(ao)
-
-      json['instances'] = json['instances'].reject do |instance|
-        instance.fetch('digital_object', {})['ref'] == "#{base_ref_uri}#{digital_object_record_id}"
-      end
-      ao.update_from_json(json)
+    def unlink_any_managed_cdm_do!(archival_object_json, archival_object)
+      ArchivalObject.
+        join(:instance, archival_object_id: :id).
+        join(:instance_do_link_rlshp, instance_id: :id).
+        join(:digital_object, id: :digital_object_id).
+        where(archival_object__id: archival_object.id).
+        where(digital_object__digital_object_id: /^(#{cdm_source}):.*/).
+        select(:digital_object__id).
+        each do |instance_data|
+          unlink_dig_obj_from_json!(archival_object_json: archival_object_json,
+                                   digital_object_record_id: instance_data[:id])
+        end
     end
 
-    def unlink_dig_obj_from_json(archival_object_json:, digital_object_record_id:)
+    # `digital_object_record_id` refers to `digital_object.id` and is named such
+    # to avoid confusion with `digital_object.digital_object_id`
+    def unlink_dig_obj_from_json!(archival_object_json:, digital_object_record_id:)
       base_ref_uri = "/repositories/#{repo_id}/digital_objects/"
 
       archival_object_json['instances'] = archival_object_json['instances'].reject do |instance|
