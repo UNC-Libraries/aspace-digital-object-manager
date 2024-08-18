@@ -27,6 +27,8 @@ module ArchivesSpace
     end
 
     def handle_datafile(datafile, deletion_scope: nil)
+      log.info('Starting')
+      log.info('Beginning DO creation')
       # To avoid a single large transaction, we split input into 50 row chunks
       # and create a transaction for each chunk.
       CSV.open(datafile, headers: true).lazy.each_slice(50) do |slice|
@@ -126,16 +128,18 @@ module ArchivesSpace
        # We want to unlink but not delete in case DO is attached to other AOs
        # Any managed DOs made orphans here will be deleted later
       if deletion_scope && deletion_scope != 'none'
+        log.info('Beginning unlinking')
         DB.open(DB.supports_mvcc?,
                 :retry_on_optimistic_locking_fail => true,
                 :isolation_level => :committed) do
           unlink_digital_objects_not_in_upload(scope: deletion_scope)
         end
       end
-
+      log.info('Beginning orphaned DO deletion')
       delete_orphaned_digital_objects
 
       # TODO: return something if errors present
+      log.info('Finished')
     end
 
     class RefIDNotFoundError < RuntimeError; end
