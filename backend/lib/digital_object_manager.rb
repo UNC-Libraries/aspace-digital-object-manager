@@ -145,7 +145,7 @@ module ArchivesSpace
       end
 
       unless AppConfig.has_key?(:digital_object_manager_log_level)
-        AppConfig[:digital_object_manager_log_level] = 'INFO'# TODO: set warn as default
+        AppConfig[:digital_object_manager_log_level] = 'warn'
       end
 
       output = AppConfig[:digital_object_manager_log]

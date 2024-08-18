@@ -8,12 +8,14 @@ In the ArchivesSpace `config.rb`:
 
 - Add 'digital_object_manager' to the plugins entry
   - e.g. `AppConfig[:plugins] = ['local', 'lcnaf', 'digital_object_manager]`
-- Optionally, configure a log path
-  - e.g. `AppConfig[:digital_object_manager_log] = '/my/log/path/example.log'`
-  - The default path is `/opt/archivesspace/logs/digital_object_manager.log`
-- Optionally, configure a logging level
-  - e.g. `AppConfig[:digital_object_manager_log_level] = 'error'`
-  - The default logging level is 'warn'
+- Optionally, add these commented-out default values to the config. Uncomment them
+  if you want to change the value from the default.
+
+  ```ruby
+  # Aspace Digital Object Manager plugin config
+  #AppConfig[:digital_object_manager_log] = '/opt/archivesspace/logs/digital_object_manager.log'
+  #AppConfig[:digital_object_manager_log_level] = 'warn'
+  ```
 
 ## Parameters
 
