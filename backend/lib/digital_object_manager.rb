@@ -124,9 +124,10 @@ module ArchivesSpace
                 :isolation_level => :committed) do
           unlink_digital_objects_not_in_upload(scope: deletion_scope)
         end
+
+        log.info('Beginning orphaned DO deletion')
+        delete_orphaned_digital_objects
       end
-      log.info('Beginning orphaned DO deletion')
-      delete_orphaned_digital_objects
 
       # TODO: return something if errors present
       log.info('Finished')
