@@ -94,8 +94,9 @@ module ArchivesSpace
       label = container_map[type]
       return label if label
 
-      raise StandardError, "CdmDigitalObject encountered an unmapped aspace container type: #{type}"
+      raise ContainerMappingError, "CdmDigitalObject encountered an unmapped aspace container type: #{type}"
     end
+    class ContainerMappingError < RuntimeError; end
 
     # Maps *Aspace* container types to Aspace container labels
     def self.container_map
@@ -128,6 +129,7 @@ module ArchivesSpace
         'imagefolder' => 'Image Folder',
         'instantaneousdisc' => 'Instantaneous Disc',
         'item' => 'Item',
+        'microfilmpositivereel' => 'Microfilm (positive Reel)',
         'minidisc' => 'Minidisc',
         'museumitem' => 'Museum Item',
         'oimage' => 'Oversize Image',

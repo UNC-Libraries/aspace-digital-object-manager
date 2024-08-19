@@ -98,7 +98,8 @@ module ArchivesSpace
 
                 # Roll back to the savepoint
                 raise Sequel::Rollback, e
-              rescue JSONModel::ValidationException, ImportException, Sequel::ValidationFailed, ReferenceError => e
+              rescue JSONModel::ValidationException, ImportException, Sequel::ValidationFailed, ReferenceError,
+                     CdmDigitalObject::ContainerMappingError => e
                 # Note: we deliberately don't catch Sequel::DatabaseError here.  The
                 # outer call to DB.open will catch that exception and retry the
                 # import for us.
