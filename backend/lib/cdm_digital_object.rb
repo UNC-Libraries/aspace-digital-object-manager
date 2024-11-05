@@ -101,9 +101,11 @@ module ArchivesSpace
     # Maps *Aspace* container types to Aspace container labels
     def self.container_map
       {
+        '8track' => '8-Track',
         'audiocassette' => 'Audiocassette',
         'audiodisc' => 'Audio Disc',
         'audiotape' => 'Audiotape',
+        'box' => 'Box',
         'bw0810print' => 'Black and White 8x10 Photographic Print',
         'bw120rollfilm' => 'Black and White 120 Roll Film',
         'bw35rollfilm' => 'Black and White 35mm Roll Film',
@@ -134,6 +136,7 @@ module ArchivesSpace
         'museumitem' => 'Museum Item',
         'oimage' => 'Oversize Image',
         'openreelvideo' => 'Open Reel Video',
+        'oversizebox' => 'Oversize Box',
         'oversizeimage' => 'Oversize Image',
         'oversizeimagefolder' => 'Oversize Image Folder',
         'oversizepaper' => 'Oversize Paper',
