@@ -91,6 +91,7 @@ module ArchivesSpace
                   unlink_any_managed_cdm_do!(archival_object_json, archival_object)
                 end
 
+                sort_instances!(archival_object_json)
                 update_archival_object(archival_object, archival_object_json)
               rescue ManagedDigitalObject::ValidationError, RefIDNotFoundError => e
                 client_errors_present = true
@@ -240,8 +241,8 @@ module ArchivesSpace
       # attempts to add a duplicatative DO instance to an AO?
 
       # link
-      instance_json = {'instance_type': 'digital_object',
-                       'digital_object': {'ref': digital_object.uri}}
+      instance_json = {'instance_type' => 'digital_object',
+                       'digital_object' => {'ref': digital_object.uri}}
       archival_object_json['instances'] << instance_json
     end
 
@@ -328,6 +329,41 @@ module ArchivesSpace
         where(digital_object__digital_object_id: managed_dig_obj_regexp).
         select(:digital_object__id).
         each(&:delete)
+    end
+
+    # Sorts instances on an AO
+    #
+    # - DO instances come last and are in alphabetical order by title
+    #   - Numbers in titles are sorted numerically (e.g. 'Folder 9', 'Folder 10')
+    # - Other instances are not rearranged
+    #
+    # The AO json includes instance details, but for DO instances does
+    # not include details for the actual DO beyond a ref/URI. So we are
+    # resolving the DO details in a copy of the json in order to be able
+    # to include DO title in the sorting.
+    def sort_instances!(archival_object_json)
+      resolved_archival_object_json = resolve_references(archival_object_json, ['digital_object'])
+
+      archival_object_json['instances'].sort_by!.with_index do |instance, index|
+        resolved_instance = resolved_archival_object_json['instances'][index]
+
+        [instance['instance_type'] == 'digital_object' ? 1 : 0,
+         pad_title(resolved_instance.dig('digital_object', '_resolved', 'title')) || '']
+      end
+    end
+
+    def resolve_references(json, reference_types)
+      URIResolver.resolve_references(json, reference_types)
+    end
+
+    # Pads numeric sequences in the Title string so the sequences are sorted numerically
+    def pad_title(title)
+      return unless title
+
+      # With this we pad every number sequence. This includes digits following a
+      # period, i.e. we're treating those as whole numbers rather than decimals
+      # which is the likely meaning in something like "Folder 3.15"
+      title.gsub(/(\d+)/) { |match| match.rjust(8, '0') }
     end
   end
 end
