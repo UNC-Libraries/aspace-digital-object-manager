@@ -24,6 +24,8 @@ In the ArchivesSpace `config.rb`:
 - delete: ['none' (default), 'global']
   - 'global' means that managed DOs not found in the digital content data being submitted will be deleted. This means you must supply a complete set of digital content data for the given source
   - 'none' means that managed DOs not found in the digital content data being submitted will be left in place. You may submit an incomplete set of digital content data to get some specified DOs created/managed, without the manager deleting all of the DOs left out of your submission
+- deletion_threshold: [`nil` (default), '1', '2', ...]
+  - Sets a minimum record threshold such that if the submitted data does not contain at least that many records, no deletions or DO unlinking will be performed. This prevents the plugin from committing mass deletions in the event faulty/incomplete data is submitted.
 
 NOTE: the repository number in the URL (e.g. ".../repositories/2/...") should be the repository you want to act on.
 
