@@ -58,6 +58,14 @@ Required fields, explanations where needed, and examples.
 
 Note that for CDM, the hookID:refID mapping file is a valid submission. That's the file produced by [ArchivesSpace_Script's](https://gitlab.lib.unc.edu/cappdev/ArchivesSpace_Scripts) `hookids/instance_to_hookid.rb`.
 
+## Responses
+
+If there were no errors, a 200 response is provided. There is no further information provided (e.g. what changes were made in ArchivesSpace or whether any changes were made in ArchivesSpace).
+
+In the case of client-side errors, a 400 is returned with lists of any errors. The user should address any client-side errors before resubmitting the data.
+
+In the case of only server-side errors, a 500 is returned with a list of any errors. Contact the local administrator of this plugin / ArchivesSpace to resolve any issues.
+
 ## Example shell usage
 
 The example data files in `examples/` have faked digital content data. However, the ref_ids specified in those files are ref_ids that are seeded in archette's TEST database/repository, so the examples below will create DOs on those seeded archival objects. If you have overwritten/deleted the TEST repository, the examples will not create DOs since the specified AOs are missing.

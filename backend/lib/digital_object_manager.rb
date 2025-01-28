@@ -28,7 +28,8 @@ module ArchivesSpace
     end
 
     def handle_datafile(datafile, deletion_scope: nil, deletion_threshold: nil)
-      log.info('Starting')
+      log.info('Starting session')
+      response = {}
       record_count = 0
 
       log.info('Beginning DO creation')
@@ -37,9 +38,6 @@ module ArchivesSpace
       CSV.open(datafile, headers: true).lazy.each_slice(50) do |slice|
         # This begin / DB.open / rescue wrapping was taken from:
         #   `archivesspace/backend/app/contollers/batch_import.rb`
-        client_errors_present = false
-        server_errors_present = false
-
         DB.open(DB.supports_mvcc?,
                 :retry_on_optimistic_locking_fail => true,
                 :isolation_level => :committed) do
@@ -73,10 +71,10 @@ module ArchivesSpace
                 end
 
                 next unless digital_object_needed?(digital_object_id, ref_id)
-
                 # For performance, defer validation until we screen out data
                 # for which a DO already exists
                 input_data.validate
+                log.debug("Validated: #{digital_object_id}, #{ref_id}")
 
                 archival_object = ArchivalObject.find(ref_id: ref_id)
                 unless archival_object
@@ -88,7 +86,6 @@ module ArchivesSpace
                   input_data,
                   ao_title: archival_object_json['title']
                 )
-
                 add_digital_object_instance!(archival_object_json: archival_object_json,
                                             digital_object: digital_object)
 
@@ -103,7 +100,8 @@ module ArchivesSpace
                 sort_instances!(archival_object_json)
                 update_archival_object(archival_object, archival_object_json)
               rescue ManagedDigitalObject::ValidationError, RefIDNotFoundError => e
-                client_errors_present = true
+                response[:client_errors] ||= []
+                response[:client_errors] << e.message
                 log.warn(e.message)
 
                 # Roll back to the savepoint
@@ -114,8 +112,8 @@ module ArchivesSpace
                 # outer call to DB.open will catch that exception and retry the
                 # import for us.
 
-                server_errors_present = true
-                log.warn(e)
+                response[:server_errors] ||= []
+                response[:server_errors] << e.message
 
                 # Roll back to the savepoint
                 raise Sequel::Rollback, e
@@ -142,11 +140,13 @@ module ArchivesSpace
         end
 
       rescue UnmetDeletionThresholdError => e
+        response[:client_errors] ||= []
+        response[:client_errors] << e.message)
         log.warn(e.message)
       end
 
-      # TODO: return something if errors present
-      log.info('Finished')
+      log.info('Finished session')
+      response
     end
 
     class RefIDNotFoundError < RuntimeError; end
