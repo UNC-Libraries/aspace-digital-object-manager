@@ -114,6 +114,7 @@ module ArchivesSpace
 
                 response[:server_errors] ||= []
                 response[:server_errors] << e.message
+                log.warn(e.message)
 
                 # Roll back to the savepoint
                 raise Sequel::Rollback, e
@@ -141,7 +142,7 @@ module ArchivesSpace
 
       rescue UnmetDeletionThresholdError => e
         response[:client_errors] ||= []
-        response[:client_errors] << e.message)
+        response[:client_errors] << e.message
         log.warn(e.message)
       end
 
