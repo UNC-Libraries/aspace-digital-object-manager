@@ -2,7 +2,13 @@ require_relative 'spec_helper'
 
 module ArchivesSpace
   RSpec.describe 'DigitalObjectManager', type: :digital_object_manager do
-    let(:manager) { DigitalObjectManager.new(source: 'cdm', repo_id: '2')}
+
+    let(:spec_log) { StringIO.new }
+    let(:manager) do
+      manager = DigitalObjectManager.new(source: 'cdm', repo_id: '2')
+      manager.logger = Logger.new(spec_log, level: 'DEBUG')
+      manager
+    end
 
     describe 'ordering' do
       # An AO with three existing, mis-ordered DOs (ordered "Folder 100...", "Folder 9...", "Test DO [unmanaged]")
@@ -60,6 +66,45 @@ module ArchivesSpace
         manager.send(:sort_instances!, ao_json)
         expect(ao_json).to eq(expected_sort)
       end
+    end
+
+    describe 'delete?' do
+      context "deletion_scope is 'none'" do
+        it 'returns false' do
+          expect(manager.send(:delete?, deletion_scope: 'none',
+                              deletion_threshold: nil)).to be false
+        end
+      end
+
+      context "deletion_scope is nil" do
+        it 'returns false' do
+          expect(manager.send(:delete?, deletion_scope: nil,
+                              deletion_threshold: nil)).to be false
+        end
+      end
+
+      context "deletion_scope is not 'none'/nil"
+        context 'submitted data contains fewer records than the deletion_threshold threshold' do
+          it 'raises an UnmetDeletionThresholdError' do
+            expect { manager.send(:delete?, deletion_scope: 'foo', record_count: 2,
+                                deletion_threshold: 3) }.
+              to raise_error(ArchivesSpace::DigitalObjectManager::UnmetDeletionThresholdError)
+          end
+        end
+
+        context 'submitted records number >= than the deletion_threshold threshold' do
+          it 'returns true' do
+            expect(manager.send(:delete?, deletion_scope: 'foo', record_count: 2,
+                                deletion_threshold: 2)).to be true
+          end
+        end
+
+        context 'deletion_threshold is not set' do
+          it 'returns true' do
+            expect(manager.send(:delete?, deletion_scope: 'foo',
+                                deletion_threshold: nil)).to be true
+          end
+        end
     end
   end
 end

@@ -24,6 +24,8 @@ In the ArchivesSpace `config.rb`:
 - delete: ['none' (default), 'global']
   - 'global' means that managed DOs not found in the digital content data being submitted will be deleted. This means you must supply a complete set of digital content data for the given source
   - 'none' means that managed DOs not found in the digital content data being submitted will be left in place. You may submit an incomplete set of digital content data to get some specified DOs created/managed, without the manager deleting all of the DOs left out of your submission
+- deletion_threshold: [`nil` (default), '1', '2', ...]
+  - Sets a minimum record threshold such that if the submitted data does not contain at least that many records, no deletions or DO unlinking will be performed. This prevents the plugin from committing mass deletions in the event faulty/incomplete data is submitted.
 
 NOTE: the repository number in the URL (e.g. ".../repositories/2/...") should be the repository you want to act on.
 
@@ -55,6 +57,14 @@ Required fields, explanations where needed, and examples.
     - 'Folder 1: Letters, 1850'
 
 Note that for CDM, the hookID:refID mapping file is a valid submission. That's the file produced by [ArchivesSpace_Script's](https://gitlab.lib.unc.edu/cappdev/ArchivesSpace_Scripts) `hookids/instance_to_hookid.rb`.
+
+## Responses
+
+If there were no errors, a 200 response is provided. There is no further information provided (e.g. what changes were made in ArchivesSpace or whether any changes were made in ArchivesSpace).
+
+In the case of client-side errors, a 400 is returned with lists of any errors. The user should address any client-side errors before resubmitting the data.
+
+In the case of only server-side errors, a 500 is returned with a list of any errors. Contact the local administrator of this plugin / ArchivesSpace to resolve any issues.
 
 ## Example shell usage
 

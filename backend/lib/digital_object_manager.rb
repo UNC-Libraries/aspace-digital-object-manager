@@ -7,6 +7,7 @@ require_relative 'digital_content_data'
 module ArchivesSpace
   class DigitalObjectManager
     attr_reader :source, :repo_id
+    attr_accessor :logger
 
     # Booleans for whether CDM and DCR DOs are managed are not.
     # These allow us to skip certain processing steps until we are actually
@@ -26,23 +27,24 @@ module ArchivesSpace
       end
     end
 
-    def handle_datafile(datafile, deletion_scope: nil)
-      log.info('Starting')
+    def handle_datafile(datafile, deletion_scope: nil, deletion_threshold: nil)
+      log.info('Starting session')
+      response = {}
+      record_count = 0
+
       log.info('Beginning DO creation')
       # To avoid a single large transaction, we split input into 50 row chunks
       # and create a transaction for each chunk.
       CSV.open(datafile, headers: true).lazy.each_slice(50) do |slice|
         # This begin / DB.open / rescue wrapping was taken from:
         #   `archivesspace/backend/app/contollers/batch_import.rb`
-        client_errors_present = false
-        server_errors_present = false
-
         DB.open(DB.supports_mvcc?,
                 :retry_on_optimistic_locking_fail => true,
                 :isolation_level => :committed) do
           slice.each do |row|
             DB.transaction(savepoint: true) do
               begin
+                record_count += 1
                 input_data = DigitalContentData.new(
                   # universal
                   source: source,
@@ -58,16 +60,21 @@ module ArchivesSpace
                 digital_object_id = input_data.digital_object_id
                 ref_id = input_data.ref_id
 
-                if deletion_scope && deletion_scope != 'none'
+                # We track upload_inventory unless it is obvious from the
+                # deletion_scope that we will not be deleting. We cannot
+                # tell yet whether the deletion_threshold threshold will be unmet
+                # and bar deletions because we are not sure of the record count
+                # and the upload may still be streaming in.
+                if delete?(deletion_scope: deletion_scope)
                   upload_inventory[digital_object_id] ||= []
                   upload_inventory[digital_object_id] << ref_id
                 end
 
                 next unless digital_object_needed?(digital_object_id, ref_id)
-
                 # For performance, defer validation until we screen out data
                 # for which a DO already exists
                 input_data.validate
+                log.debug("Validated: #{digital_object_id}, #{ref_id}")
 
                 archival_object = ArchivalObject.find(ref_id: ref_id)
                 unless archival_object
@@ -79,7 +86,6 @@ module ArchivesSpace
                   input_data,
                   ao_title: archival_object_json['title']
                 )
-
                 add_digital_object_instance!(archival_object_json: archival_object_json,
                                             digital_object: digital_object)
 
@@ -94,7 +100,8 @@ module ArchivesSpace
                 sort_instances!(archival_object_json)
                 update_archival_object(archival_object, archival_object_json)
               rescue ManagedDigitalObject::ValidationError, RefIDNotFoundError => e
-                client_errors_present = true
+                response[:client_errors] ||= []
+                response[:client_errors] << e.message
                 log.warn(e.message)
 
                 # Roll back to the savepoint
@@ -105,8 +112,9 @@ module ArchivesSpace
                 # outer call to DB.open will catch that exception and retry the
                 # import for us.
 
-                server_errors_present = true
-                log.warn(e)
+                response[:server_errors] ||= []
+                response[:server_errors] << e.message
+                log.warn(e.message)
 
                 # Roll back to the savepoint
                 raise Sequel::Rollback, e
@@ -116,27 +124,34 @@ module ArchivesSpace
         end
       end
 
-       # Unlink any DO/AO links not present in the data and within scope (scope: none, global)
-       # We want to unlink but not delete in case DO is attached to other AOs
-       # Any managed DOs made orphans here will be deleted later
-      if deletion_scope && deletion_scope != 'none'
-        log.info('Beginning unlinking')
-        DB.open(DB.supports_mvcc?,
-                :retry_on_optimistic_locking_fail => true,
-                :isolation_level => :committed) do
-          unlink_digital_objects_not_in_datafile(scope: deletion_scope)
+      # Unlink any DO/AO links not present in the data and within scope (scope: none, global)
+      # We want to unlink but not delete in case DO is attached to other AOs
+      # Any managed DOs made orphans here will be deleted later
+      begin
+        if delete?(deletion_scope: deletion_scope, deletion_threshold: deletion_threshold, record_count: record_count)
+          log.info('Beginning unlinking')
+          DB.open(DB.supports_mvcc?,
+                  :retry_on_optimistic_locking_fail => true,
+                  :isolation_level => :committed) do
+            unlink_digital_objects_not_in_datafile(scope: deletion_scope)
+          end
+
+          log.info('Beginning orphaned DO deletion')
+          delete_orphaned_digital_objects
         end
 
-        log.info('Beginning orphaned DO deletion')
-        delete_orphaned_digital_objects
+      rescue UnmetDeletionThresholdError => e
+        response[:client_errors] ||= []
+        response[:client_errors] << e.message
+        log.warn(e.message)
       end
 
-      # TODO: return something if errors present
-      log.info('Finished')
+      log.info('Finished session')
+      response
     end
 
     class RefIDNotFoundError < RuntimeError; end
-
+    class UnmetDeletionThresholdError < RuntimeError; end
     private
 
     def log
@@ -170,6 +185,17 @@ module ArchivesSpace
       return true if source == dcr_source
 
       !DCR_MANAGED || !dcr_dos?(ref_id)
+    end
+
+    # False when we should not unlink/delete DOs (i.e. when we can skip
+    # checking whether individual DOs are deletable)
+    def delete?(deletion_scope:, deletion_threshold: nil, record_count: nil)
+      return false unless deletion_scope && deletion_scope != 'none'
+      return true unless deletion_threshold
+
+      return true if record_count.to_i >= deletion_threshold.to_i
+
+      raise UnmetDeletionThresholdError, "Submitted record count of #{record_count} does not meet deletion_threshold value of #{deletion_threshold}"
     end
 
     # Returns Boolean of whether AO has DCR DOs
@@ -273,6 +299,7 @@ module ArchivesSpace
             json = ArchivalObject.to_jsonmodel(ao)
 
             deletions.each do |digital_object_id|
+              log.info("Deleting: #{digital_object_id} from #{ref_id}")
               digital_object = DigitalObject.first(digital_object_id: digital_object_id)
               next unless digital_object
 
