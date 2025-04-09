@@ -4,10 +4,10 @@ require_relative 'managed_digital_object'
 
 module ArchivesSpace
   class CdmDigitalObject < ManagedDigitalObject
-    attr_reader :collection_number, :ao_title
+    attr_reader :collection_number, :cdm_alias, :ao_title
 
     # - content_id is a cache_hookid, e.g. "01234_folder_1"
-    # - collection number needs to include any z modifiers (e.g. "01234-z") or
+    # - collection_number needs to include any z modifiers (e.g. "01234-z") or
     #     the CDM search links will fail. The `collid` field from the mapping
     #     file includes z-modifiers. But, for example, the collection number
     #     used as acache_hookid prefix does not, and so would not work.
@@ -15,6 +15,9 @@ module ArchivesSpace
     #     "openreelvideo"). It's important to use an aspace_hookid, not a
     #     cache_hookid, because aspace container types sometimes differ from
     #     cache/EAD container types
+    # - cdm_alias is effectively the number/alias for the *CDM* collection,
+    #     which for content in "bucket" CDM collections will differ from the
+    #     collection_number (i.e. the *EAD* collection number)
     # - ao_title is the title of any one AO that is or will be linked to this DO
     def initialize(content_data, skip_validation: false, **kwargs)
       content_data.validate unless skip_validation || content_data.validated
@@ -22,6 +25,7 @@ module ArchivesSpace
       @content_id = content_data.content_id
       @collection_number = content_data.collection_number
       @aspace_hookid = content_data.aspace_hookid
+      @cdm_alias = content_data.cdm_alias
 
       @ao_title = kwargs[:ao_title]
     end
@@ -61,6 +65,10 @@ module ArchivesSpace
         raise ValidationError, "Invalid aspace_hookid: #{input_data.aspace_hookid}"
       end
 
+      if input_data.cdm_alias.to_s.empty?
+        raise ValidationError, "Invalid cdm_alias: #{input_data.cdm_alias}"
+      end
+
       true
     end
 
@@ -78,10 +86,14 @@ module ArchivesSpace
       self.class.container_label(type: aspace_container_type)
     end
 
+    # Note: the "/order/relatid" parameter does not function without the
+    #   "/collection/#{cdm_alias}"" scoping (AS-754)
     def uri
-      'https://dc.lib.unc.edu/cdm/search/searchterm/' \
+      'https://dc.lib.unc.edu/cdm/search' \
+      "/collection/#{cdm_alias}/searchterm/" \
       "#{hook_id}!#{collection_number}" \
-      '/field/all!all/mode/exact!exact/conn/and!and'
+      '/field/all!all/mode/exact!exact/conn/and!and' \
+      '/order/relatid'
     end
 
     def role

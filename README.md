@@ -48,6 +48,9 @@ Required fields, explanations where needed, and examples.
     - '01234-z'
   - **aspace_hookid**
     - '01234_folder_3'
+  - **cdm_alias** the cdm-collectionNumber/cdmAlias for the given EAD collection/collid (some EAD collections are in their own CDM collection; some EAD collections are in a bucket CDM collection that includes multiple EAD collections)
+    - '01234'
+    - '00ddd'
 - DCR:
   - **ref_id** - ref_id for the corresponding AO
     - 'fcee5fc2bb61effc8836498a8117b05d'
