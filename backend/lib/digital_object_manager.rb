@@ -55,7 +55,8 @@ module ArchivesSpace
                   # cdm
                   collection_number: row['collid'],
                   aspace_hookid: row['aspace_hookid'],
-                  cdm_alias: row['cdm_alias']
+                  cdm_alias: row['cdm_alias'],
+                  ao_title: row['ao_title']
                 )
 
                 digital_object_id = input_data.digital_object_id
@@ -76,17 +77,14 @@ module ArchivesSpace
                 # for which a DO already exists
                 input_data.validate
                 log.debug("Validated: #{digital_object_id}, #{ref_id}")
+                digital_object = get_or_create_digital_object(input_data)
 
                 archival_object = ArchivalObject.find(ref_id: ref_id)
                 unless archival_object
                   raise RefIDNotFoundError, "AO not found for ref_id: #{ref_id}"
                 end
                 archival_object_json = ArchivalObject.to_jsonmodel(archival_object)
-
-                digital_object = get_or_create_digital_object(
-                  input_data,
-                  ao_title: archival_object_json['title']
-                )
+                
                 add_digital_object_instance!(archival_object_json: archival_object_json,
                                             digital_object: digital_object)
 

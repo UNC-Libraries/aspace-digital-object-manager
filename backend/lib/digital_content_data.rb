@@ -10,7 +10,7 @@ module ArchivesSpace
   class DigitalContentData
     attr_reader :source, :content_id, :ref_id,
                 :content_title,
-                :collection_number, :aspace_hookid, :cdm_alias,
+                :collection_number, :aspace_hookid, :cdm_alias, :ao_title,
                 :validated
 
     def initialize(args = {})
@@ -23,6 +23,7 @@ module ArchivesSpace
       @collection_number = args[:collection_number]
       @aspace_hookid = args[:aspace_hookid]
       @cdm_alias = args[:cdm_alias]
+      @ao_title = args[:ao_title]
     end
 
     # Returns DO Model corresponding to the metadata source

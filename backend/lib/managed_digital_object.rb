@@ -58,5 +58,16 @@ module ArchivesSpace
       raise NoMethodError, "#{self.class} must implement .validate"
     end
     class ValidationError < RuntimeError; end
+
+    # Unescapes "\t" and "\\" into literal tab and backslash characters, which is required for the Aspace
+    # title to include those literal characters. Other escape sequences, e.g. "\n" are not unescaped,
+    # because it is not obvious including those literals in Aspace titles is desirable.
+    def self.partially_unescape_title(title)
+      return title unless title
+
+      #title.gsub(/\\t/, "\t").gsub(/\\\\(?!t)/, "\\")
+      #title.gsub(/\\([t\\])/) { |m| '\\' + $1}
+      title.gsub(/\\([t\\])/) { $1 == 't' ? "\t" : "\\" }
+    end
   end
 end
