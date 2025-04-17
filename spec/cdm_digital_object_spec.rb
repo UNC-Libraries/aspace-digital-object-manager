@@ -8,7 +8,8 @@ module ArchivesSpace
         content_id: '01234_box_5',
         ref_id: 'fcee5fc2bb61effc8836498a8117b05d',
         collection_number: '01234-z',
-        aspace_hookid: '01234_documentcase_5678'
+        aspace_hookid: '01234_documentcase_5678',
+        cdm_alias: '01ddd'
       )
     end
     let(:cdm_dig_obj) { CdmDigitalObject.new(content_data, ao_title: 'My AO Title') }
@@ -26,7 +27,7 @@ module ArchivesSpace
         expect(subject['title']).to eq('Document Case 5: My AO Title')
         expect(subject['publish']).to be true
         expect(subject['file_versions'].length).to eq(1)
-        expect(subject['file_versions'].first['file_uri']).to eq('https://dc.lib.unc.edu/cdm/search/searchterm/box_5!01234-z/field/all!all/mode/exact!exact/conn/and!and')
+        expect(subject['file_versions'].first['file_uri']).to eq('https://dc.lib.unc.edu/cdm/search/collection/01ddd/searchterm/box_5!01234-z/field/all!all/mode/exact!exact/conn/and!and/order/relatid')
         expect(subject['file_versions'].first['publish']).to be true
         expect(subject['file_versions'].first['use_statement']).to eq('link')
         expect(subject['file_versions'].first['xlink_actuate_attribute']).to eq('onRequest')

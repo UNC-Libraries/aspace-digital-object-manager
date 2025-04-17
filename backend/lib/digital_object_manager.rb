@@ -54,7 +54,8 @@ module ArchivesSpace
                   content_title: row['content_title'] || row['work_title'],
                   # cdm
                   collection_number: row['collid'],
-                  aspace_hookid: row['aspace_hookid']
+                  aspace_hookid: row['aspace_hookid'],
+                  cdm_alias: row['cdm_alias']
                 )
 
                 digital_object_id = input_data.digital_object_id
