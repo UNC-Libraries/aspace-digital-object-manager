@@ -27,7 +27,8 @@ module ArchivesSpace
       end
     end
 
-    def handle_datafile(datafile, deletion_scope: nil, deletion_threshold: nil)
+    def handle_datafile(datafile, deletion_scope: nil, deletion_threshold: nil,
+                        update_digital_object_metadata: false)
       log.info('Starting session')
       response = {}
       record_count = 0
@@ -72,19 +73,41 @@ module ArchivesSpace
                   upload_inventory[digital_object_id] << ref_id
                 end
 
-                next unless digital_object_needed?(digital_object_id, ref_id)
+                # We always need to know whether a digital object is needed so here we always
+                # evaluate it and also cache it
+                next unless (need_ao_do_link = digital_object_needed?(digital_object_id, ref_id)) ||
+                              update_digital_object_metadata
+                              
                 # For performance, defer validation until we screen out data
                 # for which a DO already exists
                 input_data.validate
                 log.debug("Validated: #{digital_object_id}, #{ref_id}")
+
                 digital_object = get_or_create_digital_object(input_data)
+
+                begin
+                  if update_digital_object_metadata
+                    submitted_digital_object = input_data.digital_object
+                    if submitted_digital_object != digital_object
+                      log.debug("Updating DO: #{digital_object_id}")
+                      updated_json = submitted_digital_object.merge_jsonmodel_payload(
+                        DigitalObject.to_jsonmodel(digital_object))
+                      digital_object.update_from_json(updated_json)
+                    end
+                  end
+                rescue => e
+                  log.warn("Error updating DO: #{digital_object_id}")
+                  raise e
+                end
+
+                next unless need_ao_do_link
 
                 archival_object = ArchivalObject.find(ref_id: ref_id)
                 unless archival_object
                   raise RefIDNotFoundError, "AO not found for ref_id: #{ref_id}"
                 end
                 archival_object_json = ArchivalObject.to_jsonmodel(archival_object)
-                
+
                 add_digital_object_instance!(archival_object_json: archival_object_json,
                                             digital_object: digital_object)
 
@@ -135,8 +158,16 @@ module ArchivesSpace
             unlink_digital_objects_not_in_datafile(scope: deletion_scope)
           end
 
-          log.info('Beginning orphaned DO deletion')
-          delete_orphaned_digital_objects
+          # A `submission` ingest will never create orphaned DOs, so we skip deleting orphaned DOs
+          # This means already-orphaned DOs will not be deleted (but already-orphaned DOs do not
+          # typically exist).
+          #
+          # A `global` ingest will delete any DOs it makes orphans, along with any already-orphaned
+          # DOs should they exist.
+          unless deletion_scope == 'submission'
+            log.info('Beginning orphaned DO deletion')
+            delete_orphaned_digital_objects
+          end
         end
 
       rescue UnmetDeletionThresholdError => e
@@ -245,11 +276,12 @@ module ArchivesSpace
     end
 
     # Retrieves an existing DO for a DCR URI; creates a DO if none exists
-    def get_or_create_digital_object(input_data, **kwargs)
+    # Returns a DigitalObject, not a DO jsonmodel
+    def get_or_create_digital_object(input_data)
       existing_dig_obj = DigitalObject.where(digital_object_id: input_data.digital_object_id).first
-      return DigitalObject.to_jsonmodel(existing_dig_obj) if existing_dig_obj
+      return existing_dig_obj if existing_dig_obj
 
-      jsonmodel = input_data.digital_object(**kwargs).jsonmodel
+      jsonmodel = input_data.digital_object.jsonmodel
       DigitalObject.create_from_json(jsonmodel)
     end
 
@@ -274,41 +306,42 @@ module ArchivesSpace
     def unlink_digital_objects_not_in_datafile(scope: nil)
       return unless scope && scope != 'none'
 
-      if scope == 'global'
-        # Note: adjusting the join order may break things because the select
-        # fields aren't qualified (e.g. `id` and `digital_object_id`)
-        instance_deletes_by_ao = {}
-        managed_digital_object_inventory.each do |do_id, ref_ids|
-          next if upload_inventory.fetch(do_id, []).sort == ref_ids.sort
+      return unless ['global', 'submission'].include?(scope)
 
-          delete_ref_ids = ref_ids - upload_inventory.fetch(do_id, [])
-          delete_ref_ids.each do |ref_id|
-            instance_deletes_by_ao[ref_id] ||= []
-            instance_deletes_by_ao[ref_id] << do_id
-          end
+      instance_deletes_by_ao = {}
+      managed_digital_object_inventory.each do |do_id, ref_ids|
+        if scope == 'submission' # skip check unless DO is in the upload
+          next unless upload_inventory.key?(do_id)
         end
+        next if upload_inventory.fetch(do_id, []).sort == ref_ids.sort
 
-        # Group deletions by AO so that deleting multiple DOs from an
-        # AO only results in one AO update
-        instance_deletes_by_ao.each do |ref_id, deletions|
-          DB.transaction(savepoint: true) do
-            base_ref_uri = "/repositories/#{repo_id}/digital_objects/"
+        delete_ref_ids = ref_ids - upload_inventory.fetch(do_id, [])
+        delete_ref_ids.each do |ref_id|
+          instance_deletes_by_ao[ref_id] ||= []
+          instance_deletes_by_ao[ref_id] << do_id
+        end
+      end
 
-            ao = ArchivalObject.first(ref_id: ref_id)
-            json = ArchivalObject.to_jsonmodel(ao)
+      # Group deletions by AO so that deleting multiple DOs from an
+      # AO only results in one AO update
+      instance_deletes_by_ao.each do |ref_id, deletions|
+        DB.transaction(savepoint: true) do
+          base_ref_uri = "/repositories/#{repo_id}/digital_objects/"
 
-            deletions.each do |digital_object_id|
-              log.info("Deleting: #{digital_object_id} from #{ref_id}")
-              digital_object = DigitalObject.first(digital_object_id: digital_object_id)
-              next unless digital_object
+          ao = ArchivalObject.first(ref_id: ref_id)
+          json = ArchivalObject.to_jsonmodel(ao)
 
-              json['instances'] = json['instances'].reject do |instance|
-                instance.fetch('digital_object', {})['ref'] == "#{base_ref_uri}#{digital_object[:id]}"
-              end
+          deletions.each do |digital_object_id|
+            log.info("Deleting: #{digital_object_id} from #{ref_id}")
+            digital_object = DigitalObject.first(digital_object_id: digital_object_id)
+            next unless digital_object
+
+            json['instances'] = json['instances'].reject do |instance|
+              instance.fetch('digital_object', {})['ref'] == "#{base_ref_uri}#{digital_object[:id]}"
             end
-
-            ao.update_from_json(json)
           end
+
+          ao.update_from_json(json)
         end
       end
     end

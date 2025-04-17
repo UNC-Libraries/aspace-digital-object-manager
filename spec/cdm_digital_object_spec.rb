@@ -40,13 +40,13 @@ module ArchivesSpace
 
       describe 'character escaping in titles' do
         it 'unescapes tabs and backslashes in title' do
-          # we're passing the literal escape sequences `\t` and `\\``
+          # we're passing the literal *escape sequences* `\t` and `\\``
           content_data[:ao_title] = "My AO Title with \\t tab and \\\\ backslash"
           expect(subject['title']).to eq("Document Case 5: My AO Title with \t tab and \\ backslash")
         end
 
         it 'literal tabs and backslashes remain literal in title' do
-          # we're passing a literal tab and literal backslash`
+          # we're passing a literal tab and literal backslash *characters*`
           content_data[:ao_title] = "My AO Title with \t tab and \\ backslash"
           expect(subject['title']).to eq("Document Case 5: My AO Title with \t tab and \\ backslash")
         end
