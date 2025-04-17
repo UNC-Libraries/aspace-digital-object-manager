@@ -27,7 +27,7 @@ module ArchivesSpace
       @aspace_hookid = content_data.aspace_hookid
       @cdm_alias = content_data.cdm_alias
 
-      @ao_title = kwargs[:ao_title]
+      @ao_title = content_data.ao_title
     end
 
     def aspace_container_type
@@ -79,7 +79,8 @@ module ArchivesSpace
     end
 
     def digital_object_title
-      "#{container_label} #{container_indicator}: #{ao_title}"
+      unescaped_ao_title = self.class.partially_unescape_title(ao_title)
+      "#{container_label} #{container_indicator}: #{unescaped_ao_title}"
     end
 
     def container_label
