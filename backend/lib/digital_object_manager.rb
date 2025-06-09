@@ -25,6 +25,10 @@ module ArchivesSpace
       unless [cdm_source, dcr_source].include?(source)
         raise StandardError, "Source must be either '#{dcr_source}' or '#{cdm_source}'"
       end
+
+      # Staff can add/delete Aspace container types from time to time, so we
+      # want to be using the latest data
+      CdmDigitalObject.refresh_container_map if source == cdm_source
     end
 
     def handle_datafile(datafile, deletion_scope: nil, deletion_threshold: nil,

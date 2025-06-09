@@ -3,6 +3,12 @@ require_relative 'spec_helper'
 module ArchivesSpace
   RSpec.describe 'CdmDigitalObject', type: :digital_object_manager do
 
+    before(:each) do
+      allow(CdmDigitalObject).to receive(:aspace_container_types).and_return(
+        ['Document Case']
+      )
+    end
+
     def jsonmodel_from_content_data(content_data)
       digital_content_data = DigitalContentData.new(content_data)
       cdm_dig_obj = CdmDigitalObject.new(digital_content_data)

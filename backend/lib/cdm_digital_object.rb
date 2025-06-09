@@ -107,73 +107,46 @@ module ArchivesSpace
       label = container_map[type]
       return label if label
 
-      raise ContainerMappingError, "CdmDigitalObject encountered an unmapped aspace container type: #{type}"
+      raise ContainerMappingError, "CdmDigitalObject could not find an Aspace match for container type: #{type}"
     end
     class ContainerMappingError < RuntimeError; end
 
-    # Maps *Aspace* container types to Aspace container labels
+    def self.aspace_container_types
+      EnumerationValue.where(
+        enumeration_id: Enumeration.first(name: 'container_type').id
+      ).map(:value)
+    end
+
     def self.container_map
+      @new_container_map ||= refresh_container_map
+    end
+
+    # Generates a hash mapping normalized Aspace container types to
+    # the unnormalized, e.g. { 'imagefolder' => 'Image Folder' ...}
+    #
+    # The container types are read from Aspace and normalized using
+    # the same normalization we use in producing the hookid:refid
+    # maps used to submit CDM data to DOMino.
+    #
+    # We override a few of the Aspace container types when the
+    # unnormalized Aspace value is not our preferred casing.
+    def self.refresh_container_map
+      @new_container_map = aspace_container_types.map { |type|
+        [type.downcase.gsub(/[ ()-]/, ''), type]
+      }.to_h.
+        merge(container_mapping_overrides)
+    end
+
+    # We override some Aspace mappings to have a preferred casing.
+    # In general we would rather they be fixed in Aspace, but it's
+    # possible 'box' and 'folder' are populated in off-the-shelf
+    # Aspace, and for 'folder' we have 350k containers and may not
+    # want to merge/correct them.
+    def self.container_mapping_overrides
       {
-        '8track' => '8-Track',
-        'audiocassette' => 'Audiocassette',
-        'audiodisc' => 'Audio Disc',
-        'audiotape' => 'Audiotape',
         'box' => 'Box',
-        'bw0810print' => 'Black and White 8x10 Photographic Print',
-        'bw120rollfilm' => 'Black and White 120 Roll Film',
-        'bw35rollfilm' => 'Black and White 35mm Roll Film',
-        'bwfilmbox' => 'Black and White Film Box',
-        'bwpprint' => 'Black and White Photographic Print',
-        'bwsheetfilm' => 'Black and White Sheet Film',
-        'c120rollfilm' => 'Color 120 Roll Film',
-        'c35rollfilm' => 'Color 35mm Roll Film',
-        'c35slide' => 'Color 35mm Slide',
-        'cpprint' => 'Color Photographic Print',
-        'csheetfilm' => 'Color Sheet Film',
-        'cylinder' => 'Cylinder',
-        'digitalaudiotape' => 'Digital Audiotape',
-        'documentcase' => 'Document Case',
-        'envelope' => 'Envelope',
-        'extraoversizepaper' => 'Extra Oversize Paper',
-        'extraoversizepaperfolder' => 'Extra Oversize Paper Folder',
-        'film' => 'Film',
-        'flatbox' => 'Flat Box',
         'folder' => 'Folder',
-        'image' => 'Image',
-        'imagebox' => 'Image Box',
-        'imagefolder' => 'Image Folder',
-        'instantaneousdisc' => 'Instantaneous Disc',
-        'item' => 'Item',
-        'microfilmpositivereel' => 'Microfilm (positive Reel)',
-        'minidisc' => 'Minidisc',
-        'museumitem' => 'Museum Item',
-        'oimage' => 'Oversize Image',
-        'openreelvideo' => 'Open Reel Video',
-        'oversizebox' => 'Oversize Box',
-        'oversizeimage' => 'Oversize Image',
-        'oversizeimagefolder' => 'Oversize Image Folder',
-        'oversizepaper' => 'Oversize Paper',
-        'oversizepaperfolder' => 'Oversize Paper Folder',
-        'oversizevolume' => 'Oversize Volume',
-        'photoalbum' => 'Photograph Album',
-        'photographalbum' => 'Photograph Album',
-        'pprint' => 'Photographic Print',
-        'recordcarton' => 'Record Carton',
-        'rolleditem' => 'Rolled Item',
-        'separatedfolder' => 'Separated Folder',
-        'sfcaudiocassette' => 'SFC Audiocassette',
-        'sfcaudioopenreel' => 'SFC Audio Open Reel',
-        'sfimage' => 'Special Format Image',
-        'sheetfilm' => 'Sheet Film',
-        'slide' => 'Slide',
-        'specialformatimage' => 'Special Format Image',
-        'svvolume' => 'SV Volume',
-        'track' => 'Track',
-        'transcriptiondisc' => 'Transcription Disc',
-        'transcriptionvolume' => 'Transcription Volume',
-        'videotape' => 'Videotape',
-        'volume' => 'Volume',
-        'wirerecording' => 'Wire Recording',
+        'volume' => 'Volume'
       }
     end
   end
