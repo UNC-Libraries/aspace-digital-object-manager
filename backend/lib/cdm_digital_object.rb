@@ -111,18 +111,20 @@ module ArchivesSpace
     end
     class ContainerMappingError < RuntimeError; end
 
+    # Returns a list of Aspace container types
     def self.aspace_container_types
       EnumerationValue.where(
         enumeration_id: Enumeration.first(name: 'container_type').id
       ).map(:value)
     end
 
+    # Returns a cached hash that maps normalized Aspace container types to
+    # the unnormalized, e.g. { 'imagefolder' => 'Image Folder' ...}
     def self.container_map
       @new_container_map ||= refresh_container_map
     end
 
-    # Generates a hash mapping normalized Aspace container types to
-    # the unnormalized, e.g. { 'imagefolder' => 'Image Folder' ...}
+    # Generates/refreshes the container_map hash
     #
     # The container types are read from Aspace and normalized using
     # the same normalization we use in producing the hookid:refid
