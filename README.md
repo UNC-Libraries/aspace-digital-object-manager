@@ -113,7 +113,7 @@ curl \
   -H "X-ArchivesSpace-Session: $TOKEN" \
   -X POST \
   --data-binary @examples/dcr_example.csv \
-  "http://localhost:8089/repositories/1/digital_object_manager?source=dcr&delete=none"
+  "http://localhost:8089/repositories/1/digital_object_manager/manage?source=dcr&delete=none"
 ```
 
 ### Manage CDM DOs
@@ -124,7 +124,7 @@ curl \
   -H "X-ArchivesSpace-Session: $TOKEN" \
   -X POST \
   --data-binary @examples/cdm_example.csv \
-  "http://localhost:8089/repositories/1/digital_object_manager?source=cdm&delete=none"
+  "http://localhost:8089/repositories/1/digital_object_manager/manage?source=cdm&delete=none"
 ```
 
 Formatting of the above examples is based off of the [jsonmodel_from_format](https://github.com/lyrasis/aspace-jsonmodel-from-format) plugin.

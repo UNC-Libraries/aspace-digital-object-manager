@@ -5,6 +5,9 @@ module ArchivesSpace
 
     let(:spec_log) { StringIO.new }
     let(:manager) do
+      allow(CdmDigitalObject).to receive(:aspace_container_types).and_return(
+        []
+      )
       manager = DigitalObjectManager.new(source: 'cdm', repo_id: '2')
       manager.logger = Logger.new(spec_log, level: 'DEBUG')
       manager
