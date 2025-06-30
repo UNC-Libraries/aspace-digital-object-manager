@@ -68,6 +68,11 @@ module ArchivesSpace
         expect { subject }.to raise_error(ArchivesSpace::ManagedDigitalObject::ValidationError)
       end
 
+      it 'succeeds for content_titles that include tabs' do
+        input_data[:content_title] = "Some Title with a literal tab: \t"
+        expect { subject }.not_to raise_error
+      end
+
       it 'fails for content_titles that include control characters' do
         input_data[:content_title] = "Some Title with \x00 control character"
         expect { subject }.to raise_error(ArchivesSpace::ManagedDigitalObject::ValidationError)

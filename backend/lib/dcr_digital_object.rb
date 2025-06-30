@@ -26,7 +26,7 @@ module ArchivesSpace
         raise ValidationError, "Invalid content_id: #{input_data.content_id}"
       end
 
-      unless input_data.content_title&.match?(/^[[:print:]]+$/)
+      unless input_data.content_title&.match?(/^[[:print:]\t]+$/)
         raise ValidationError, "Invalid content_title: #{input_data.content_title}"
       end
     end
