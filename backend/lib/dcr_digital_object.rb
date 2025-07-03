@@ -18,15 +18,15 @@ module ArchivesSpace
     end
 
     def self.validate(input_data)
-      unless input_data.ref_id.match?(/^\h{32}$/)
+      unless input_data.ref_id&.match?(/^\h{32}$/)
         raise ValidationError, "Invalid ref_id: #{input_data.ref_id}"
       end
 
-      unless input_data.content_id.match?(/^\h{8}\-\h{4}\-\h{4}\-\h{4}\-\h{12}$/)
+      unless input_data.content_id&.match?(/^\h{8}\-\h{4}\-\h{4}\-\h{4}\-\h{12}$/)
         raise ValidationError, "Invalid content_id: #{input_data.content_id}"
       end
 
-      unless input_data.content_title.match?(/^[[:print:]]+$/)
+      unless input_data.content_title&.match?(/^[[:print:]\t]+$/)
         raise ValidationError, "Invalid content_title: #{input_data.content_title}"
       end
     end

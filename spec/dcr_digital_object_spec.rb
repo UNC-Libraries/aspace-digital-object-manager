@@ -30,5 +30,63 @@ module ArchivesSpace
         expect(subject['file_versions'].first['xlink_show_attribute']).to eq('new')
       end
     end
+
+    describe '.validate' do
+
+      let(:input_data) do
+        {
+          source: 'dcr',
+          ref_id: 'fcee5fc2bb61effc8836498a8117b05d',
+          content_id: '12345678-abcd-abcd-abcd-1234567890ab',
+          content_title: 'My Work Title'
+        }
+      end
+
+      let(:subject) { DcrDigitalObject.validate(DigitalContentData.new(input_data)) }
+
+      it 'succeeds for valid input data' do
+        expect { subject }.not_to raise_error
+      end
+
+      it 'fails for wrongly structured ref_ids' do
+        input_data[:ref_id] = 'abcd'
+        expect { subject }.to raise_error(ArchivesSpace::ManagedDigitalObject::ValidationError)
+      end
+
+      it 'fails for nil ref_ids' do
+        input_data.delete(:ref_id)
+        expect { subject }.to raise_error(ArchivesSpace::ManagedDigitalObject::ValidationError)
+      end
+
+      it 'fails for wrongly structured content_ids (UUIDs)' do
+        input_data[:content_id] = 'abcd'
+        expect { subject }.to raise_error(ArchivesSpace::ManagedDigitalObject::ValidationError)
+      end
+
+      it 'fails for nil content_id (UUIDS)' do
+        input_data.delete(:content_id)
+        expect { subject }.to raise_error(ArchivesSpace::ManagedDigitalObject::ValidationError)
+      end
+
+      it 'succeeds for content_titles that include tabs' do
+        input_data[:content_title] = "Some Title with a literal tab: \t"
+        expect { subject }.not_to raise_error
+      end
+
+      it 'fails for content_titles that include control characters' do
+        input_data[:content_title] = "Some Title with \x00 control character"
+        expect { subject }.to raise_error(ArchivesSpace::ManagedDigitalObject::ValidationError)
+      end
+
+      it 'fails for content_titles that are empty' do
+        input_data[:content_title] = ''
+        expect { subject }.to raise_error(ArchivesSpace::ManagedDigitalObject::ValidationError)
+      end
+
+      it 'fails for nil content_titles' do
+        input_data.delete(:content_title)
+        expect { subject }.to raise_error(ArchivesSpace::ManagedDigitalObject::ValidationError)
+      end
+    end
   end
 end
