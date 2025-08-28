@@ -4,13 +4,14 @@ require_relative 'managed_digital_object'
 
 module ArchivesSpace
   class DcrDigitalObject < ManagedDigitalObject
-    attr_reader :content_title
+    attr_reader :content_title, :content_type
 
     def initialize(content_data, skip_validation: false, **kwargs)
       content_data.validate unless skip_validation || content_data.validated
 
       @content_id = content_data.content_id
       @content_title = content_data.content_title
+      @content_type = content_data.content_type&.downcase || 'link'
     end
 
     def self.id_from_data(input_data)
@@ -29,6 +30,11 @@ module ArchivesSpace
       unless input_data.content_title&.match?(/^[[:print:]\t]+$/)
         raise ValidationError, "Invalid content_title: #{input_data.content_title}"
       end
+
+      # when no content_type is provided we use a default value
+      unless valid_roles.include?(input_data.content_type&.downcase) || !input_data.content_type
+        raise ValidationError, "Invalid content_type: #{input_data.content_type}"
+      end
     end
 
     private
@@ -46,9 +52,14 @@ module ArchivesSpace
     end
 
     def role
-      # DCR DOs should have more specific-roles when possible, but until
-      # we have means of assigning them, we use only the default 'link'
-      'link'
+      content_type
+    end
+
+    def self.valid_roles
+      @valid_roles ||= [
+        'link', 'image', 'pdf', 'audio', 'video', 'streaming audio',
+        'streaming video'
+      ]
     end
   end
 end

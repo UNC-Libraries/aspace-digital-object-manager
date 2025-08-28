@@ -57,6 +57,7 @@ module ArchivesSpace
                   ref_id: row['ref_id'],
                   # dcr
                   content_title: row['content_title'] || row['work_title'],
+                  content_type: row['content_type'],
                   # cdm
                   collection_number: row['collid'],
                   aspace_hookid: row['aspace_hookid'],
@@ -81,7 +82,7 @@ module ArchivesSpace
                 # evaluate it and also cache it
                 next unless (need_ao_do_link = digital_object_needed?(digital_object_id, ref_id)) ||
                               update_digital_object_metadata
-                              
+
                 # For performance, defer validation until we screen out data
                 # for which a DO already exists
                 input_data.validate

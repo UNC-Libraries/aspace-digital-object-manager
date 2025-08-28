@@ -66,6 +66,9 @@ Required fields, explanations where needed, and examples.
 - CDM:
   - **ref_id** - ref_id for the corresponding AO
     - 'fcee5fc2bb61effc8836498a8117b05d'
+  - **ao_title** - title for the corresponding Aspace AO
+    - 'Letters, 1850'
+    - Note: may differ from the title of the digital content in the repository, e.g. "Folder 1: Letters, 1850"
   - **cache_hookid** (or '**content_id**')
     - '01234_folder_3'
   - **collid** - the collection number, including any z modifiers
@@ -82,6 +85,8 @@ Required fields, explanations where needed, and examples.
     - 'b7b8be2b-ffd7-4f6d-9f1b-6cf5d71d5e4a'
   - **work_title** (or '**content_title**')
     - 'Folder 1: Letters, 1850'
+  - **content_type** - optional, with default value: 'link'. Indicates how the URL should be presented, e.g. as an html link, in an image viewer, in an audio player
+    - 'image'
 
 Note that for CDM, the hookID:refID mapping file is a valid submission. That's the file produced by [ArchivesSpace_Script's](https://gitlab.lib.unc.edu/cappdev/ArchivesSpace_Scripts) `hookids/instance_to_hookid.rb`.
 
@@ -100,7 +105,7 @@ The example data files in `examples/` have faked digital content data. However, 
 ### Authenticate
 
 ```sh
-# fill in user name and password
+# fill in user name, password, and hostname/port if needed
 echo "export TOKEN=$(curl -F password={USER_PASSWORD} http://localhost:8089/users/{USER}/login | jq '.session')" > .session
 source .session
 ```
