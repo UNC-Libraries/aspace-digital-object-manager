@@ -9,7 +9,7 @@ module ArchivesSpace
   # a specific AO
   class DigitalContentData
     attr_reader :source, :content_id, :ref_id,
-                :content_title,
+                :content_title, :content_type,
                 :collection_number, :aspace_hookid, :cdm_alias, :ao_title,
                 :validated
 
@@ -19,6 +19,7 @@ module ArchivesSpace
       @ref_id = args[:ref_id]
 
       @content_title = args[:content_title]
+      @content_type = args[:content_type]
 
       @collection_number = args[:collection_number]
       @aspace_hookid = args[:aspace_hookid]
